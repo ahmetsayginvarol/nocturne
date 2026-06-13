@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eclipse · Deck 7 — Live Monitor</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=DM+Mono:wght@300;400;500&display=swap');
+
+/* ── TOKENS ── */
+:root {
+  --bg:      #0d1520;
+  --panel:   #111d2e;
+  --card:    #162032;
+  --border:  #1e3050;
+  --border2: #2a4060;
+  --text:    #ddeeff;
+  --dim:     #5a7a9a;
+  --mid:     #8aadcc;
+  --gold:    #c9a84c;
+  --gold2:   #e8c46a;
+  --teal:    #2dd4bf;
+  --s1:      #f4a261;
+  --s2:      #e63946;
+  --s3:      #9b5fe0;
+  --avail:   #0f1e30;
+  --radius:  8px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; overflow: hidden; }
+
+/* ── APP SHELL ── */
+#app {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 290px;
+  grid-template-rows: 64px 1fr 32px;
+  grid-template-areas: "hd hd" "main side" "ft ft";
+}
+
+/* ── HEADER ── */
+#hd {
+  grid-area: hd;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border2);
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  gap: 14px;
+  flex-shrink: 0;
+}
+#hd-brand { flex-shrink: 0; }
+#hd-brand h1 {
+  font-family: 'Cinzel', serif;
+  font-size: 17px;
+  color: var(--gold2);
+  letter-spacing: 5px;
+  line-height: 1;
+}
+#hd-brand p {
+  font-size: 7.5px;
+  color: var(--dim);
+  letter-spacing: 2.5px;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+/* stat pills */
+.pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 13px;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--border2);
+  flex-shrink: 0;
+  min-width: 72px;
+}
+.pill-val { font-size: 21px; font-weight: 500; line-height: 1; }
+.pill-lbl { font-size: 6.5px; color: var(--dim); text-transform: uppercase; letter-spacing: 1.2px; margin-top: 3px; }
+.pill-avail  .pill-val { color: var(--teal); }
+.pill-seated .pill-val { color: var(--gold); }
+.pill-covers .pill-val { color: var(--s1); }
+.pill-turns  .pill-val { font-size: 12px; line-height: 1.5; color: var(--mid); }
+
+/* capacity ring */
+#cap { position: relative; width: 54px; height: 54px; flex-shrink: 0; }
+#cap-svg { width: 54px; height: 54px; transform: rotate(-90deg); }
+#cap-bg  { fill: none; stroke: var(--border2); stroke-width: 5; }
+#cap-arc { fill: none; stroke: var(--gold); stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset 1s ease, stroke .5s; }
+#cap-label {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-size: 12px; color: var(--gold2); font-weight: 500; line-height: 1;
+}
+#cap-label small { font-size: 6.5px; color: var(--dim); margin-top: 1px; }
+
+/* clock & conn */
+#hd-right { margin-left: auto; display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+#clock { font-size: 24px; color: var(--gold2); letter-spacing: 2px; }
+#date  { font-size: 8px; color: var(--dim); text-align: right; line-height: 1.7; }
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--dim);
+  transition: background .4s, box-shadow .4s;
+}
+.conn-dot.live  { background: var(--teal); box-shadow: 0 0 7px var(--teal); animation: blink 3s ease-in-out infinite; }
+.conn-dot.error { background: var(--s2);   box-shadow: 0 0 7px var(--s2); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+/* ── MAIN ── */
+#main {
+  grid-area: main;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  padding: 12px 10px 12px 16px;
+  gap: 10px;
+}
+#feeds-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── HEATMAP ── */
+#hm-wrap { flex-shrink: 0; }
+#hm-label { font-size: 7px; color: var(--dim); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+#heatmap {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  gap: 3px;
+  content-visibility: auto;
+}
+.hm-cell {
+  width: 100%; aspect-ratio: 1; border-radius: 4px;
+  background: var(--avail); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 4.5px; color: rgba(60,100,140,.4);
+  transition: background .35s, border-color .35s, box-shadow .35s;
+  position: relative; cursor: default;
+}
+.hm-cell.occ1 { background: rgba(244,162,97,.85); border-color: var(--s1); color: #1a0500; }
+.hm-cell.occ2 { background: rgba(230,57,70,.85);  border-color: var(--s2); color: #fff; }
+.hm-cell.occ3 { background: rgba(123,47,190,.85); border-color: var(--s3); color: #fff; }
+.hm-cell.overtime { animation: ot-pulse 2.4s ease-in-out infinite; }
+@keyframes ot-pulse { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 0 3px rgba(255,255,255,.18)} }
+.hm-cell.sharing { outline: 2px dashed rgba(255,255,255,.55); outline-offset: 1px; }
+.hm-cell.split { border-color: var(--gold) !important; overflow: hidden; }
+.hm-cell.split::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 50%;
+  width: 1.5px; background: rgba(255,255,255,.45); z-index: 2;
+}
+.hm-cell:hover { transform: scale(1.65); z-index: 20; box-shadow: 0 0 10px rgba(201,168,76,.45); }
+
+/* ── FEEDS ── */
+.feed-panel {
+  display: flex; flex-direction: column;
+  overflow: hidden; min-height: 0;
+}
+.feed-hdr {
+  display: flex; align-items: center; gap: 7px;
+  margin-bottom: 7px; flex-shrink: 0;
+}
+.feed-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); animation: blink 2s ease-in-out infinite; }
+.feed-dot.gold { background: var(--gold); }
+.feed-lbl { font-size: 7.5px; color: var(--dim); text-transform: uppercase; letter-spacing: 1.5px; }
+.feed-list {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+  padding-right: 4px;
+}
+.feed-list::-webkit-scrollbar { width: 2px; }
+.feed-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 1px; }
+/* broadcast feed items */
+.bc-item {
+  padding: 7px 10px; border-radius: 7px;
+  background: var(--card); border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  animation: fi-in .3s cubic-bezier(.2,.8,.3,1);
+  flex-shrink: 0;
+}
+.bc-item.has-photo { border-left-color: var(--teal); }
+.bc-time   { font-size: 8px; color: var(--dim); margin-bottom: 3px; }
+.bc-sender { font-size: 9px; color: var(--gold2); font-weight: 600; margin-bottom: 3px; }
+.bc-text   { font-size: 11px; color: var(--text); line-height: 1.4; }
+.bc-photo  { margin-top: 6px; }
+.bc-photo img { max-width: 100%; max-height: 120px; border-radius: 6px; border: 1px solid var(--border2); display: block; cursor: pointer; }
+.fi {
+  display: grid;
+  grid-template-columns: 40px 20px 1fr;
+  align-items: start; gap: 6px;
+  padding: 6px 10px; border-radius: 7px;
+  background: var(--card); border: 1px solid var(--border);
+  border-left: 3px solid var(--dim);
+  animation: fi-in .3s cubic-bezier(.2,.8,.3,1);
+  flex-shrink: 0;
+}
+@keyframes fi-in { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+.fi.s1 { border-left-color: var(--s1); background: linear-gradient(90deg, rgba(244,162,97,.04) 0%, var(--card) 75%); }
+.fi.s2 { border-left-color: var(--s2); background: linear-gradient(90deg, rgba(230,57,70,.04)  0%, var(--card) 75%); }
+.fi.s3 { border-left-color: var(--s3); background: linear-gradient(90deg, rgba(123,47,190,.05) 0%, var(--card) 75%); }
+.fi.reset   { border-left-color: var(--dim); }
+.fi.combine { border-left-color: var(--gold); }
+.fi.share   { border-left-color: var(--teal); }
+.fi-time  { font-size: 8.5px; color: var(--dim); padding-top: 1px; }
+.fi-icon  { font-size: 13px; }
+.fi-title { font-size: 11px; color: var(--text); }
+.fi-title strong { color: var(--gold2); }
+.fi-sub   { font-size: 8.5px; color: var(--mid); margin-top: 2px; line-height: 1.4; }
+.badge {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  font-size: 7.5px; font-weight: 600; margin-left: 4px; vertical-align: middle;
+}
+.b-s1   { background: rgba(244,162,97,.18); color: var(--s1); }
+.b-s2   { background: rgba(230,57,70,.18);  color: var(--s2); }
+.b-s3   { background: rgba(123,47,190,.18); color: var(--s3); }
+.b-teal { background: rgba(45,212,191,.13); color: var(--teal); }
+.empty-msg { font-size: 9px; color: var(--dim); font-style: italic; padding: 6px 0; }
+
+/* ── SIDEBAR ── */
+#side {
+  grid-area: side;
+  background: var(--panel);
+  border-left: 1px solid var(--border2);
+  overflow-y: auto;
+  padding: 12px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+#side::-webkit-scrollbar { width: 2px; }
+#side::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.s-card {
+  background: var(--card); border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 11px 13px;
+}
+.s-title {
+  font-size: 7.5px; color: var(--dim); text-transform: uppercase;
+  letter-spacing: 1.5px; margin-bottom: 11px;
+  display: flex; align-items: center; gap: 6px;
+}
+.s-title::after { content: ''; flex: 1; height: 1px; background: var(--border2); }
+
+/* waiter station cards */
+.sec-group { margin-bottom: 6px; }
+.sec-hdr {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 9px; border-radius: 6px;
+  cursor: pointer; user-select: none;
+  transition: filter .15s;
+  touch-action: manipulation;
+}
+.sec-hdr:hover { filter: brightness(1.18); }
+.sec-hdr-label { font-size: 9.5px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; flex: 1; }
+.sec-hdr-stats { font-size: 8.5px; color: rgba(255,255,255,.55); display: flex; gap: 9px; }
+.sec-arrow { font-size: 9px; color: rgba(255,255,255,.45); transition: transform .2s; }
+.sec-arrow.open { transform: rotate(90deg); }
+.sec-cards { display: flex; flex-direction: column; gap: 4px; overflow: hidden; transition: max-height .3s ease; padding-top: 4px; }
+.sec-cards.collapsed { max-height: 0 !important; padding-top: 0; }
+
+.st-card {
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 7px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;
+}
+.st-hdr { display: flex; align-items: center; gap: 7px; }
+.st-num {
+  width: 24px; height: 24px; border-radius: 5px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+}
+.st-detail { font-size: 7.5px; color: var(--dim); }
+.st-covers { font-size: 16px; font-weight: 500; line-height: 1; }
+.st-covers-lbl { font-size: 6.5px; color: var(--dim); text-align: right; }
+.st-bar-wrap { height: 3px; background: var(--border2); border-radius: 2px; overflow: hidden; }
+.st-bar { height: 3px; border-radius: 2px; transition: width .8s ease; }
+.st-ot { font-size: 7.5px; color: var(--s2); }
+
+/* table size breakdown */
+.sz-item { display: flex; flex-direction: column; gap: 4px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.sz-item:last-child { border-bottom: none; }
+.sz-row { display: flex; align-items: center; gap: 8px; }
+.sz-name { font-size: 10.5px; color: var(--text); flex-shrink: 0; width: 48px; }
+.sz-name span { font-size: 7.5px; color: var(--dim); }
+.sz-counts { margin-left: auto; text-align: right; flex-shrink: 0; }
+.sz-avail { font-size: 15px; font-weight: 500; line-height: 1; }
+.sz-of    { font-size: 7.5px; color: var(--dim); margin-top: 1px; }
+.sz-bar-wrap { height: 5px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+.sz-bar { height: 5px; border-radius: 3px; transition: width .9s cubic-bezier(.4,0,.2,1); }
+
+/* overtime chips */
+.ot-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.ot-chip {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 20px;
+  background: rgba(230,57,70,.08); border: 1px solid rgba(230,57,70,.28);
+  font-size: 9.5px; color: var(--s2);
+}
+.ot-chip .ot-t { font-size: 7.5px; color: rgba(230,57,70,.5); }
+
+/* tonight service summary */
+.svc-row { display: flex; align-items: center; gap: 8px; }
+.svc-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.svc-lbl { font-size: 10px; color: var(--mid); flex: 1; }
+.svc-right { text-align: right; }
+.svc-val { font-size: 17px; font-weight: 500; line-height: 1; color: var(--text); }
+.svc-sub { font-size: 7.5px; color: var(--dim); margin-top: 1px; }
+.svc-bar-wrap { height: 3px; background: var(--border2); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.svc-bar { height: 3px; border-radius: 2px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+
+/* presence */
+.pres-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; border-bottom: 1px solid var(--border);
+}
+.pres-row:last-child { border-bottom: none; }
+.pres-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; transition: background .4s; }
+.pres-name { flex: 1; font-size: 10.5px; }
+.pres-time { font-size: 7.5px; color: var(--dim); white-space: nowrap; }
+
+/* ── FOOTER ── */
+#ft {
+  grid-area: ft;
+  background: var(--panel); border-top: 1px solid var(--border2);
+  padding: 0 18px;
+  display: flex; align-items: center; gap: 14px;
+  font-size: 8px; color: var(--dim);
+  flex-shrink: 0;
+}
+.leg { display: flex; align-items: center; gap: 5px; }
+.leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+#ft-credit { margin-left: auto; color: var(--border2); }
+#ft-credit strong { color: var(--dim); }
+
+/* ── POPUP ── */
+#popup {
+  position: fixed;
+  background: var(--card); border: 1px solid var(--border2);
+  border-radius: 9px; padding: 11px 14px;
+  font-size: 10px; z-index: 9999;
+  min-width: 170px;
+  box-shadow: 0 10px 36px rgba(0,0,0,.8);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .15s, visibility .15s;
+}
+#popup.show { opacity: 1; visibility: visible; pointer-events: auto; }
+.pp-title {
+  font-family: 'Cinzel', serif; font-size: 12px; color: var(--gold);
+  margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid var(--border2);
+}
+.pp-row { display: flex; justify-content: space-between; gap: 10px; margin-top: 3px; color: var(--dim); }
+.pp-val { color: var(--text); }
+.pp-halves { display: flex; gap: 6px; margin-top: 6px; }
+.pp-half { flex: 1; padding: 5px 7px; border-radius: 5px; border: 1px solid var(--border2); background: var(--panel); font-size: 9px; }
+
+/* ── CHEF'S TABLE PANEL ── */
+.ct-event-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 0; border-bottom: 1px solid var(--border);
+}
+.ct-event-row:last-child { border-bottom: none; }
+.ct-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+}
+.ct-ev-info { flex: 1; }
+.ct-ev-name { font-size: 11px; color: var(--text); }
+.ct-ev-sub  { font-size: 8px; color: var(--dim); margin-top: 2px; }
+.ct-ev-badge {
+  font-size: 7.5px; font-weight: 600; padding: 2px 6px; border-radius: 3px;
+  flex-shrink: 0; align-self: center;
+}
+.ct-badge-confirmed { background: rgba(45,212,191,.15); color: var(--teal); }
+.ct-badge-draft     { background: rgba(201,168,76,.12); color: var(--gold); }
+.ct-badge-cancelled { background: rgba(230,57,70,.12);  color: var(--s2); }
+
+/* ── MOBILE ── */
+@media (max-width: 768px) {
+  html, body { overflow: auto; }
+  #app { display: flex; flex-direction: column; height: auto; min-height: 100vh; }
+  #hd { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 8px; }
+  #hd-brand h1 { font-size: 14px; }
+  .pill-val { font-size: 17px; }
+  .pill { min-width: 60px; padding: 5px 9px; }
+  #cap { width: 44px; height: 44px; }
+  #cap-svg { width: 44px; height: 44px; }
+  #main { height: auto; overflow: visible; }
+  #heatmap { grid-template-columns: repeat(20, 1fr); gap: 2px; }
+  .hm-cell { font-size: 3.5px; }
+  #feeds-row { grid-template-columns: 1fr; }
+  .feed-list { max-height: 280px; overflow-y: auto; }
+  #side { border-left: none; border-top: 1px solid var(--border2); height: auto; overflow: visible; }
+  #ft { flex-wrap: wrap; height: auto; padding: 6px 14px; gap: 8px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- HEADER -->
+<div id="hd">
+  <div id="hd-brand">
+    <h1>ECLIPSE</h1>
+    <p>Deck 7 · Live Operations · Sun Princess</p>
+  </div>
+
+  <div class="pill pill-avail">
+    <div class="pill-val" id="st-avail">—</div>
+    <div class="pill-lbl">Avail. Seats</div>
+  </div>
+  <div class="pill pill-seated">
+    <div class="pill-val" id="st-seated">—</div>
+    <div class="pill-lbl">Tables Seated</div>
+  </div>
+  <div class="pill pill-covers">
+    <div class="pill-val" id="st-covers">—</div>
+    <div class="pill-lbl">Covers</div>
+  </div>
+  <div class="pill pill-turns">
+    <div class="pill-val">
+      <span style="color:var(--s1)" id="tt1">0</span>
+      <span style="color:var(--mid);font-size:9px"> / </span>
+      <span style="color:var(--s2)" id="tt2">0</span>
+      <span style="color:var(--mid);font-size:9px"> / </span>
+      <span style="color:var(--s3)" id="tt3">0</span>
+    </div>
+    <div class="pill-lbl">1st / 2nd / 3rd</div>
+  </div>
+
+  <div id="cap">
+    <svg id="cap-svg" viewBox="0 0 54 54">
+      <circle id="cap-bg"  cx="27" cy="27" r="21"/>
+      <circle id="cap-arc" cx="27" cy="27" r="21" stroke-dasharray="131.9" stroke-dashoffset="131.9"/>
+    </svg>
+    <div id="cap-label"><span id="cap-pct">0%</span><small>full</small></div>
+  </div>
+
+  <div id="hd-right">
+    <div class="conn-dot" id="conn-dot"></div>
+    <div>
+      <div id="clock">--:--:--</div>
+      <div id="date"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="hm-wrap">
+    <div id="hm-label">Floor Overview — 161 Tables</div>
+    <div id="heatmap"></div>
+  </div>
+
+  <div id="feeds-row">
+    <!-- Events feed -->
+    <div class="feed-panel">
+      <div class="feed-hdr">
+        <div class="feed-dot"></div>
+        <div class="feed-lbl">Floor Events</div>
+      </div>
+      <div class="feed-list" id="feed">
+        <div class="empty-msg" id="feed-empty">Waiting for activity…</div>
+      </div>
+    </div>
+    <!-- Broadcast feed -->
+    <div class="feed-panel">
+      <div class="feed-hdr">
+        <div class="feed-dot gold"></div>
+        <div class="feed-lbl">Broadcasts &amp; Messages</div>
+      </div>
+      <div class="feed-list" id="bc-feed">
+        <div class="empty-msg" id="bc-feed-empty">No messages yet…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div id="side">
+
+  <div class="s-card">
+    <div class="s-title">Chef's Table</div>
+    <div id="ct-panel"><div class="empty-msg">No events today</div></div>
+  </div>
+
+  <div class="s-card">
+    <div class="s-title">Waiter Stations</div>
+    <div id="stations-grid"></div>
+  </div>
+
+  <div class="s-card">
+    <div class="s-title">Active Devices</div>
+    <div id="presence-list"><div class="empty-msg">No active devices</div></div>
+  </div>
+
+  <div class="s-card">
+    <div class="s-title">Table Availability by Size</div>
+    <div id="sz-list"></div>
+  </div>
+
+  <div class="s-card">
+    <div class="s-title">Overtime · 90 min+</div>
+    <div class="ot-list" id="ot-list"><div class="empty-msg">None currently</div></div>
+  </div>
+
+  <div class="s-card">
+    <div class="s-title">Tonight's Service</div>
+
+    <div class="svc-row">
+      <div class="svc-dot" style="background:var(--s1)"></div>
+      <div class="svc-lbl">1st Turn</div>
+      <div class="svc-right">
+        <div class="svc-val" id="ss-1">0</div>
+        <div class="svc-sub" id="ss-1t">0 tables</div>
+      </div>
+    </div>
+    <div class="svc-bar-wrap"><div class="svc-bar" id="ss-bar1" style="width:0%;background:var(--s1)"></div></div>
+
+    <div class="svc-row" style="margin-top:9px">
+      <div class="svc-dot" style="background:var(--s2)"></div>
+      <div class="svc-lbl">2nd Turn</div>
+      <div class="svc-right">
+        <div class="svc-val" id="ss-2">0</div>
+        <div class="svc-sub" id="ss-2t">0 tables</div>
+      </div>
+    </div>
+    <div class="svc-bar-wrap"><div class="svc-bar" id="ss-bar2" style="width:0%;background:var(--s2)"></div></div>
+
+    <div class="svc-row" style="margin-top:9px">
+      <div class="svc-dot" style="background:var(--s3)"></div>
+      <div class="svc-lbl">3rd Turn</div>
+      <div class="svc-right">
+        <div class="svc-val" id="ss-3">0</div>
+        <div class="svc-sub" id="ss-3t">0 tables</div>
+      </div>
+    </div>
+    <div class="svc-bar-wrap"><div class="svc-bar" id="ss-bar3" style="width:0%;background:var(--s3)"></div></div>
+
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:7.5px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Total Tonight</div>
+      <div>
+        <span id="ss-tot" style="font-size:19px;color:var(--gold2);font-weight:500">0</span>
+        <span id="ss-tott" style="font-size:8.5px;color:var(--mid);margin-left:4px">covers</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div id="ft">
+  <div class="leg"><div class="leg-dot" style="background:var(--avail);border:1px solid var(--border2)"></div>Available</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--s1)"></div>1st Turn</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--s2)"></div>2nd Turn</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--s3)"></div>3rd Turn</div>
+  <div class="leg"><div style="width:10px;height:8px;border-radius:2px;background:linear-gradient(90deg,rgba(244,162,97,.8) 50%,var(--avail) 50%);border:1px solid var(--gold)"></div>Split</div>
+  <div class="leg"><div style="width:9px;height:9px;border-radius:50%;outline:2px dashed rgba(255,255,255,.45);outline-offset:1px;background:var(--avail)"></div>Sharing</div>
+  <div class="leg"><div class="leg-dot" style="background:transparent;box-shadow:0 0 0 2px rgba(255,255,255,.25)"></div>Overtime</div>
+  <div id="ft-credit">Eclipse Restaurant · Deck 7 · Sun Princess · Monitor by <strong>Ahmet Saygin VAROL</strong></div>
+</div>
+
+</div><!-- #app -->
+
+<!-- POPUP (hover/click detail card) -->
+<div id="popup"></div>
+
+<script>
+'use strict';
+
+// ── Firebase ──────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyDNIpnIuJIF1guVUydbAmo_vV7OBNl3a28",
+  authDomain:        "eclipse-floor.firebaseapp.com",
+  databaseURL:       "https://eclipse-floor-default-rtdb.firebaseio.com",
+  projectId:         "eclipse-floor",
+  storageBucket:     "eclipse-floor.firebasestorage.app",
+  messagingSenderId: "726505687250",
+  appId:             "1:726505687250:web:4a80333510fa6308ec450b"
+};
+firebase.initializeApp(firebaseConfig);
+const db  = firebase.database();
+const REF = db.ref('eclipse/deck7/floor');
+
+// ── Shared constants ──────────────────────────────────────────────────────
+const TURN_NAMES   = ['', '1st Turn', '2nd Turn', '3rd Turn'];
+const TURN_COLORS  = ['', 'var(--s1)', 'var(--s2)', 'var(--s3)'];
+const TURN_BADGES  = ['', 'b-s1', 'b-s2', 'b-s3'];
+const HEATMAP_FILL = ['rgba(8,17,30,0.9)', 'rgba(244,162,97,.85)', 'rgba(230,57,70,.85)', 'rgba(123,47,190,.85)'];
+const OT_MS        = 90 * 60 * 1000;   // 90 minutes in ms
+const FEED_MAX     = 80;
+
+// ── Table data (161 tables) ───────────────────────────────────────────────
+const TD = [
+  {id:'301',s:2},{id:'302',s:4},{id:'303',s:2},{id:'304',s:2},{id:'305',s:4},{id:'306',s:2},{id:'307',s:4},{id:'308',s:4},{id:'309',s:4},{id:'310',s:4},
+  {id:'311',s:2},{id:'312',s:2},{id:'313',s:4},{id:'314',s:2},{id:'315',s:4},{id:'316',s:2},{id:'317',s:4},{id:'318',s:4},{id:'319',s:4},{id:'320',s:4},
+  {id:'321',s:8},{id:'324',s:4},{id:'325',s:2},{id:'326',s:2},{id:'327',s:4},{id:'328',s:4},{id:'329',s:2},{id:'330',s:4},{id:'331',s:4},{id:'332',s:2},
+  {id:'333',s:2},{id:'334',s:4},{id:'335',s:2},{id:'336',s:2},{id:'337',s:4},{id:'338',s:4},{id:'339',s:4},{id:'340',s:4},{id:'341',s:6},{id:'342',s:2},
+  {id:'343',s:2},{id:'344',s:2},{id:'345',s:4},{id:'346',s:6},{id:'347',s:2},{id:'348',s:4},{id:'349',s:4},{id:'350',s:4},{id:'351',s:2},{id:'352',s:4},
+  {id:'353',s:2},{id:'354',s:2},{id:'355',s:2},{id:'356',s:2},{id:'357',s:2},{id:'401',s:6},{id:'402',s:4},{id:'403',s:2},{id:'404',s:4},{id:'405',s:4},
+  {id:'406',s:4},{id:'407',s:4},{id:'408',s:6},{id:'409',s:2},{id:'410',s:6},{id:'411',s:2},{id:'412',s:4},{id:'413',s:4},{id:'414',s:2},{id:'415',s:4},
+  {id:'416',s:4},{id:'417',s:4},{id:'418',s:2},{id:'419',s:2},{id:'420',s:8},{id:'421',s:4},{id:'422',s:4},{id:'423',s:2},{id:'424',s:4},{id:'425',s:4},
+  {id:'426',s:2},{id:'427',s:4},{id:'428',s:4},{id:'429',s:2},{id:'430',s:2},{id:'431',s:2},{id:'432',s:2},{id:'433',s:2},{id:'434',s:2},{id:'435',s:2},
+  {id:'436',s:2},{id:'437',s:4},{id:'438',s:4},{id:'439',s:2},{id:'440',s:4},{id:'441',s:4},{id:'442',s:2},{id:'443',s:6},{id:'444',s:2},{id:'445',s:6},
+  {id:'446',s:2},{id:'447',s:6},{id:'448',s:4},{id:'449',s:4},{id:'450',s:2},{id:'451',s:4},{id:'452',s:4},{id:'453',s:6},{id:'454',s:4},{id:'500',s:2},
+  {id:'501',s:4},{id:'502',s:2},{id:'503',s:4},{id:'504',s:4},{id:'505',s:4},{id:'506',s:2},{id:'509',s:10},{id:'510',s:4},{id:'511',s:2},{id:'512',s:2},
+  {id:'513',s:2},{id:'514',s:2},{id:'515',s:4},{id:'516',s:2},{id:'517',s:4},{id:'518',s:4},{id:'519',s:2},{id:'520',s:2},{id:'521',s:4},{id:'522',s:4},
+  {id:'523',s:2},{id:'524',s:4},{id:'525',s:2},{id:'526',s:4},{id:'527',s:10},{id:'530',s:4},{id:'531',s:4},{id:'532',s:4},{id:'533',s:4},{id:'534',s:8},
+  {id:'536',s:4},{id:'537',s:2},{id:'538',s:4},{id:'539',s:2},{id:'540',s:2},{id:'541',s:4},{id:'542',s:2},{id:'543',s:4},{id:'544',s:4},{id:'545',s:2},
+  {id:'546',s:4},{id:'547',s:4},{id:'548',s:4},{id:'549',s:2},{id:'550',s:2},{id:'551',s:4},{id:'552',s:6},{id:'553',s:6},{id:'554',s:4},{id:'555',s:2},
+  {id:'556',s:2},{id:'557',s:4},{id:'558',s:2},{id:'559',s:4},{id:'560',s:4},{id:'561',s:6},{id:'562',s:2},{id:'563',s:4},{id:'564',s:2},{id:'565',s:2},
+  {id:'566',s:4},{id:'567',s:4},{id:'568',s:4},{id:'569',s:2},{id:'570',s:2},{id:'571',s:2},{id:'572',s:2},{id:'573',s:2},
+];
+const SEAT_TOTAL = TD.reduce((a, t) => a + t.s, 0);
+const SEAT_MAP   = Object.fromEntries(TD.map(t => [t.id, t.s]));
+
+// ── Waiter stations ───────────────────────────────────────────────────────
+const STATIONS = [
+  { st:49, sec:7, tables:['301','302','303','306','307','308','309'] },
+  { st:50, sec:7, tables:['317','318','319','320','321'] },
+  { st:51, sec:7, tables:['304','305','310','312','313','314','315'] },
+  { st:53, sec:7, tables:['316','356','357','407','408','409','410','411'] },
+  { st:54, sec:7, tables:['324','325','326','327','328','329','330'] },
+  { st:55, sec:7, tables:['350','351','352','353','354','355','412'] },
+  { st:56, sec:7, tables:['331','332','333','334','335','336','337'] },
+  { st:57, sec:7, tables:['338','339','340','346','347'] },
+  { st:58, sec:7, tables:['341','342','343','344','345','348','349'] },
+  { st:59, sec:7, tables:['413','414','415','416','420'] },
+  { st:67, sec:8, tables:['560','561','562','563','564'] },
+  { st:68, sec:8, tables:['553','554','555','556','557','558'] },
+  { st:69, sec:8, tables:['548','549','550','551','552'] },
+  { st:70, sec:8, tables:['542','543','544','545','546','547'] },
+  { st:71, sec:8, tables:['525','536','537','538','539','540','541'] },
+  { st:72, sec:8, tables:['520','521','524','526','534'] },
+  { st:73, sec:8, tables:['518','519','530','531','532','533'] },
+  { st:74, sec:8, tables:['510','511','512','513','514','515','517'] },
+  { st:75, sec:8, tables:['509','527'] },
+  { st:76, sec:8, tables:['500','501','502','503','504','505','506'] },
+  { st:52, sec:9, tables:['311','401','402','403','404','406'] },
+  { st:60, sec:9, tables:['421','423','424','434','435','436','437'] },
+  { st:61, sec:9, tables:['425','426','427','432','433','438','439'] },
+  { st:62, sec:9, tables:['428','429','430','431','440','441','442'] },
+  { st:63, sec:9, tables:['405','452','453','454'] },
+  { st:64, sec:9, tables:['444','445','446','447','448'] },
+  { st:65, sec:9, tables:['443','565','566','568','569','570','571','572'] },
+  { st:66, sec:9, tables:['417','418','419','422','559','567'] },
+  { st:77, sec:9, tables:['449','451','450','516','522','523','573'] },
+];
+
+// ── App state ─────────────────────────────────────────────────────────────
+let floor    = { tables: {}, combinations: [], splits: {}, turnCounts: {} };
+let prevTables = null;   // snapshot for diff
+let feed     = [];       // activity feed items
+let pinned   = false;    // popup pinned by click
+
+// Collapsed sections — persist per-session
+const SEC_KEY  = 'eclipse_sec_collapsed';
+let collapsed  = JSON.parse(sessionStorage.getItem(SEC_KEY) || '{"7":true,"8":true,"9":true}');
+
+// ── User color (same hash as main app) ───────────────────────────────────
+const USER_COLORS = ['#22d3ee','#3b82f6','#a855f7','#ec4899','#ef4444','#f97316','#eab308','#22c55e','#10b981','#94a3b8'];
+function getUserColor(name) {
+  if (!name) return '#6a8aaa';
+  let h = 0;
+  for (let i = 0; i < name.length; i++) { h = ((h << 5) - h) + name.charCodeAt(i); h |= 0; }
+  return USER_COLORS[Math.abs(h) % USER_COLORS.length];
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────
+function tick() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('date').innerHTML =
+    n.toLocaleDateString([], { weekday:'short', day:'2-digit', month:'short', year:'numeric' }) +
+    '<br>Sun Princess · Eclipse D7';
+}
+setInterval(tick, 1000);
+tick();
+
+// ── Elapsed time helper ───────────────────────────────────────────────────
+function elapsed(seatedAt) {
+  if (!seatedAt) return null;
+  const m = Math.floor((Date.now() - seatedAt) / 60000);
+  return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0') + 'm';
+}
+
+// ── Relative time (for presence) ──────────────────────────────────────────
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60)  return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60)  return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24)  return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+// ── Build heatmap cells (once) ────────────────────────────────────────────
+const hmEl = document.getElementById('heatmap');
+TD.forEach(t => {
+  const c = document.createElement('div');
+  c.className = 'hm-cell';
+  c.id = 'hc-' + t.id;
+  c.textContent = t.id;
+  c.addEventListener('mouseenter', e => showPopup(t.id, e));
+  c.addEventListener('mouseleave', () => hidePopup());
+  c.addEventListener('mousemove',  e => movePopup(e));
+  c.addEventListener('click',      e => { showPopup(t.id, e, true); });
+  hmEl.appendChild(c);
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('.hm-cell') && !e.target.closest('#popup')) hidePopup(true);
+});
+
+// ── Connection indicator ──────────────────────────────────────────────────
+db.ref('.info/connected').on('value', snap => {
+  document.getElementById('conn-dot').className = 'conn-dot ' + (snap.val() ? 'live' : 'error');
+});
+
+// ── Firebase live listener ────────────────────────────────────────────────
+REF.on('value', snap => {
+  const data = snap.val();
+  if (!data) return;
+
+  if (prevTables) diffAndFeed(prevTables, data.tables || {});
+  prevTables         = JSON.parse(JSON.stringify(data.tables || {}));
+  floor.tables       = data.tables       || {};
+  floor.combinations = data.combinations || [];
+  floor.splits       = data.splits       || {};
+  floor.turnCounts   = data.turnCounts   || {};
+
+  renderAll();
+});
+
+// ── Presence listener ─────────────────────────────────────────────────────
+db.ref('eclipse/deck7/presence').on('value', snap => {
+  const data  = snap.val() || {};
+  const now   = Date.now();
+  const users = Object.values(data).map(u => ({ ...u, active: (now - u.ts) < 120000 }));
+  renderPresence(users);
+});
+
+// ── Broadcast listener ─────────────────────────────────────────────────────
+let bcItems = [];   // newest first
+db.ref('eclipse/deck7/broadcasts').limitToLast(40).on('child_added', snap => {
+  const v = snap.val();
+  if (!v || !v.msg) return;
+  bcItems.unshift({ ...v, key: snap.key });
+  if (bcItems.length > 40) bcItems.pop();
+  renderBroadcasts();
+});
+
+// ── Chef's Table listener ──────────────────────────────────────────────────
+let ctEvents = {};
+db.ref('eclipse/deck7/chefsTable').on('value', snap => {
+  ctEvents = snap.val() || {};
+  renderCT();
+});
+
+// ── Diff → activity feed ──────────────────────────────────────────────────
+function diffAndFeed(prev, next) {
+  const ids = new Set([...Object.keys(prev), ...Object.keys(next)]);
+  ids.forEach(id => {
+    const p = prev[id], n = next[id];
+    if      (!p && n?.occupied)                                          pushFeed('s'+n.seating, '🪑', id, n, 'seat');
+    else if (p?.occupied && !n?.occupied)                                pushFeed('reset',        '⊘',  id, null, 'reset');
+    else if (p?.occupied && n?.occupied && p.seatedAt !== n.seatedAt)   pushFeed('s'+n.seating, '🔄', id, n, 'return');
+    else if (p?.occupied && n?.occupied && p.covers   !== n.covers)     pushFeed('s'+n.seating, '➕', id, n, 'add', p.covers);
+    else if (p?.occupied && n?.occupied && !p.sharing && n.sharing)     pushFeed('share',        '⟳',  id, n, 'sharing');
+  });
+}
+
+function pushFeed(cls, icon, id, ts, type, prevCovers) {
+  const t       = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const badge   = ts?.seating ? `<span class="badge ${TURN_BADGES[ts.seating]}">${TURN_NAMES[ts.seating]}</span>` : '';
+  const byColor = getUserColor(ts?.seatedBy || '');
+  const byTag   = ts?.seatedBy ? `<span style="color:${byColor};font-size:8.5px"> · ${ts.seatedBy}</span>` : '';
+  const cabins  = ts?.staterooms?.length ? 'Cabin ' + ts.staterooms.join(', ') : '';
+
+  let title = '', sub = '';
+  if (type === 'seat') {
+    title = `Table <strong>${id}</strong> seated ${badge}${byTag}`;
+    const parts = [];
+    if (ts?.covers) parts.push(ts.covers + ' cover' + (ts.covers !== 1 ? 's' : ''));
+    if (cabins) parts.push(cabins);
+    sub = parts.join(' · ');
+  } else if (type === 'reset') {
+    title = `Table <strong>${id}</strong> cleared`;
+    sub   = 'Now available';
+  } else if (type === 'return') {
+    title = `Table <strong>${id}</strong> re-seated ${badge}${byTag}`;
+    const parts = [];
+    if (ts?.covers) parts.push(ts.covers + ' cvr');
+    if (cabins) parts.push(cabins);
+    sub = parts.join(' · ');
+  } else if (type === 'add') {
+    const delta = (ts?.covers || 0) - (prevCovers || 0);
+    title = `Table <strong>${id}</strong> <span class="badge b-teal">+${delta > 0 ? delta : '?'} added</span>${byTag}`;
+    sub   = 'Now ' + (ts?.covers || 0) + ' covers' + (cabins ? ' · ' + cabins : '');
+  } else if (type === 'sharing') {
+    title = `Table <strong>${id}</strong> <span class="badge b-teal">⟳ SHARING</span>${byTag}`;
+    sub   = 'Marked as sharing table';
+  }
+
+  feed.unshift({ cls, icon, t, title, sub });
+  if (feed.length > FEED_MAX) feed.pop();
+  renderFeed();
+}
+
+// ── Render orchestrator ───────────────────────────────────────────────────
+function renderAll() {
+  renderStats();
+  renderHeatmap();
+  renderSidebar();
+  renderServiceSummary();
+  renderStations();
+}
+
+// ── Stats header ──────────────────────────────────────────────────────────
+function renderStats() {
+  let avail = 0, seated = 0, covers = 0, occupiedSeats = 0;
+  const turns = { 1: 0, 2: 0, 3: 0 };
+
+  TD.forEach(td => {
+    const ts = floor.tables[td.id];
+    if (ts?.occupied) {
+      seated++;
+      covers       += ts.covers || 0;
+      occupiedSeats += td.s;
+      if (ts.seating >= 1 && ts.seating <= 3) turns[ts.seating]++;
+    } else {
+      avail += td.s;
+    }
+  });
+
+  document.getElementById('st-avail').textContent  = avail;
+  document.getElementById('st-seated').textContent = seated;
+  document.getElementById('st-covers').textContent = covers;
+  document.getElementById('tt1').textContent = turns[1];
+  document.getElementById('tt2').textContent = turns[2];
+  document.getElementById('tt3').textContent = turns[3];
+
+  // Capacity ring
+  const pct  = Math.round(occupiedSeats / SEAT_TOTAL * 100);
+  const circ = 2 * Math.PI * 21;   // r=21
+  const col  = pct < 60 ? '#2dd4bf' : pct < 85 ? '#c9a84c' : '#e63946';
+  const arc  = document.getElementById('cap-arc');
+  arc.setAttribute('stroke-dashoffset', circ - circ * pct / 100);
+  arc.setAttribute('stroke', col);
+  document.getElementById('cap-pct').textContent = pct + '%';
+}
+
+// ── Heatmap update ────────────────────────────────────────────────────────
+function renderHeatmap() {
+  const splits = floor.splits || {};
+  const now    = Date.now();
+
+  TD.forEach(td => {
+    const c = document.getElementById('hc-' + td.id);
+    if (!c) return;
+
+    if (splits[td.id]) {
+      const letters = splits[td.id].letters || ['A', 'B'];
+      c.style.background = '';
+
+      if (letters.length <= 2) {
+        const aS = floor.tables[td.id + 'A'] || {};
+        const bS = floor.tables[td.id + 'B'] || {};
+        c.className = 'hm-cell split';
+        c.style.background = `linear-gradient(90deg,${aS.occupied ? HEATMAP_FILL[aS.seating] : HEATMAP_FILL[0]} 50%,${bS.occupied ? HEATMAP_FILL[bS.seating] : HEATMAP_FILL[0]} 50%)`;
+      } else if (letters.length === 3) {
+        const [sA, sB, sC] = letters.map(l => floor.tables[td.id + l] || {});
+        c.className = 'hm-cell split';
+        c.style.background = `conic-gradient(${sA.occupied ? HEATMAP_FILL[sA.seating] : HEATMAP_FILL[0]} 0 90deg,${sB.occupied ? HEATMAP_FILL[sB.seating] : HEATMAP_FILL[0]} 90deg 180deg,${sC.occupied ? HEATMAP_FILL[sC.seating] : HEATMAP_FILL[0]} 180deg 360deg)`;
+      } else {
+        const [sA, sB, sC, sD] = ['A','B','C','D'].map(l => floor.tables[td.id + l] || {});
+        c.className = 'hm-cell split';
+        c.style.background = `conic-gradient(${sA.occupied ? HEATMAP_FILL[sA.seating] : HEATMAP_FILL[0]} 0 90deg,${sB.occupied ? HEATMAP_FILL[sB.seating] : HEATMAP_FILL[0]} 90deg 180deg,${sD.occupied ? HEATMAP_FILL[sD.seating] : HEATMAP_FILL[0]} 180deg 270deg,${sC.occupied ? HEATMAP_FILL[sC.seating] : HEATMAP_FILL[0]} 270deg 360deg)`;
+      }
+    } else {
+      const ts = floor.tables[td.id];
+      const ot = ts?.occupied && ts.seatedAt && (now - ts.seatedAt) >= OT_MS;
+      c.className = 'hm-cell' +
+        (ts?.occupied ? ' occ' + ts.seating : '') +
+        (ot ? ' overtime' : '') +
+        (ts?.sharing && ts?.occupied ? ' sharing' : '');
+      c.style.background = '';
+    }
+  });
+}
+
+// ── Activity feed ─────────────────────────────────────────────────────────
+function renderFeed() {
+  const el    = document.getElementById('feed');
+  const empty = document.getElementById('feed-empty');
+
+  if (!feed.length) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  // Only insert the newest item at the top — don't rebuild the whole list
+  const newest = feed[0];
+  const row    = document.createElement('div');
+  row.className = 'fi ' + newest.cls;
+  row.innerHTML = `<span class="fi-time">${newest.t}</span><span class="fi-icon">${newest.icon}</span><div><div class="fi-title">${newest.title}</div>${newest.sub ? `<div class="fi-sub">${newest.sub}</div>` : ''}</div>`;
+  el.insertBefore(row, el.firstChild);
+
+  // Trim excess DOM nodes
+  while (el.children.length > FEED_MAX + 1) el.removeChild(el.lastChild);
+}
+
+// ── Presence ──────────────────────────────────────────────────────────────
+function renderPresence(users) {
+  const el = document.getElementById('presence-list');
+  if (!el) return;
+
+  if (!users.length) {
+    el.innerHTML = '<div class="empty-msg">No active devices</div>';
+    return;
+  }
+
+  el.innerHTML = users
+    .sort((a, b) => b.active - a.active)
+    .map(u => {
+      const col = getUserColor(u.name || '');
+      return `<div class="pres-row">
+        <div class="pres-dot" style="background:${u.active ? col : 'var(--dim)'};${u.active ? 'box-shadow:0 0 5px '+col : ''}"></div>
+        <div class="pres-name" style="color:${u.active ? col : 'var(--dim)'}">${u.name || 'Unknown'}</div>
+        <div class="pres-time">${u.active ? 'online' : timeAgo(u.ts)}</div>
+      </div>`;
+    }).join('');
+}
+
+// ── Sidebar: size breakdown + overtime ───────────────────────────────────
+function renderSidebar() {
+  const sizes      = [2, 4, 6, 8, 10];
+  const sizeColors = { 2:'#2dd4bf', 4:'#c9a84c', 6:'#f4a261', 8:'#e63946', 10:'#9b5fe0' };
+  const totals     = {};
+  const avails     = {};
+  const now        = Date.now();
+
+  sizes.forEach(s => { totals[s] = 0; avails[s] = 0; });
+  TD.forEach(td => {
+    const sz = td.s;
+    totals[sz] = (totals[sz] || 0) + 1;
+    if (!floor.tables[td.id]?.occupied) avails[sz] = (avails[sz] || 0) + 1;
+    else avails[sz] = avails[sz] || 0;
+  });
+
+  document.getElementById('sz-list').innerHTML = sizes
+    .filter(s => totals[s] > 0)
+    .map(s => {
+      const total   = totals[s];
+      const avail   = avails[s];
+      const pct     = Math.round(avail / total * 100);
+      const col     = sizeColors[s] || 'var(--gold)';
+      const urgency = pct === 0 ? 'rgba(230,57,70,.9)' : pct <= 30 ? 'rgba(230,57,70,.7)' : pct <= 60 ? 'rgba(201,168,76,.9)' : col;
+      return `<div class="sz-item">
+        <div class="sz-row">
+          <div class="sz-name">${s}-top <span>/ ${total}</span></div>
+          <div class="sz-counts">
+            <div class="sz-avail" style="color:${urgency}">${avail}</div>
+            <div class="sz-of">available</div>
+          </div>
+        </div>
+        <div class="sz-bar-wrap"><div class="sz-bar" style="width:${pct}%;background:${urgency}"></div></div>
+      </div>`;
+    }).join('');
+
+  // Overtime list
+  const otItems = [];
+  TD.forEach(td => {
+    const ts = floor.tables[td.id];
+    if (ts?.occupied && ts.seatedAt && (now - ts.seatedAt) >= OT_MS) {
+      otItems.push({ id: td.id, e: elapsed(ts.seatedAt) });
+    }
+  });
+  document.getElementById('ot-list').innerHTML = otItems.length
+    ? otItems.map(o => `<div class="ot-chip">${o.id}<span class="ot-t">${o.e}</span></div>`).join('')
+    : '<div class="empty-msg">None currently</div>';
+}
+
+// ── Service summary ───────────────────────────────────────────────────────
+function renderServiceSummary() {
+  const turns = { 1: { tables: 0, covers: 0 }, 2: { tables: 0, covers: 0 }, 3: { tables: 0, covers: 0 } };
+
+  TD.forEach(td => {
+    const tc = floor.turnCounts[td.id] || 0;
+    if (tc <= 0) return;
+    const ts = floor.tables[td.id];
+    const cvr = ts?.occupied ? (ts.covers || td.s) : td.s;
+    for (let t = 1; t <= Math.min(tc, 3); t++) {
+      turns[t].tables++;
+      turns[t].covers += cvr;
+    }
+  });
+
+  // Include split halves
+  Object.entries(floor.splits || {}).forEach(([pid, split]) => {
+    (split.letters || ['A', 'B']).forEach(letter => {
+      const hid = pid + letter;
+      const tc  = floor.turnCounts[hid] || 0;
+      if (tc <= 0) return;
+      const hs  = floor.tables[hid];
+      const parentTd = TD.find(t => t.id === pid);
+      const cvr = hs?.occupied ? (hs.covers || 2) : Math.ceil((parentTd?.s || 4) / (split.letters || ['A','B']).length);
+      for (let t = 1; t <= Math.min(tc, 3); t++) {
+        turns[t].tables++;
+        turns[t].covers += cvr;
+      }
+    });
+  });
+
+  const maxCovers   = Math.max(turns[1].covers, turns[2].covers, turns[3].covers, 1);
+  const totalCovers = turns[1].covers + turns[2].covers + turns[3].covers;
+  const totalTables = turns[1].tables + turns[2].tables + turns[3].tables;
+
+  [1, 2, 3].forEach(n => {
+    document.getElementById('ss-' + n).textContent   = turns[n].covers;
+    document.getElementById('ss-' + n + 't').textContent = turns[n].tables + ' table' + (turns[n].tables !== 1 ? 's' : '');
+    document.getElementById('ss-bar' + n).style.width = Math.round(turns[n].covers / maxCovers * 100) + '%';
+  });
+  document.getElementById('ss-tot').textContent  = totalTables;
+  document.getElementById('ss-tott').textContent = totalCovers + ' total covers';
+}
+
+// ── Waiter stations ───────────────────────────────────────────────────────
+function toggleSection(sec) {
+  collapsed[sec] = !collapsed[sec];
+  sessionStorage.setItem(SEC_KEY, JSON.stringify(collapsed));
+  document.getElementById('sec-cards-' + sec).classList.toggle('collapsed', !!collapsed[sec]);
+  document.getElementById('sec-arrow-' + sec).classList.toggle('open', !collapsed[sec]);
+}
+
+function renderStations() {
+  const grid     = document.getElementById('stations-grid');
+  if (!grid) return;
+  const secColors = { 7: '#4a9eff', 8: '#2dd4bf', 9: '#c9a84c' };
+  const now       = Date.now();
+  let html = '';
+
+  [7, 8, 9].forEach(sec => {
+    const secStations = STATIONS.filter(s => s.sec === sec);
+    const col         = secColors[sec];
+    const isCollapsed = !!collapsed[sec];
+
+    let secSeats = 0, secCap = 0, secOT = 0, secCovers = 0;
+    secStations.forEach(st => {
+      st.tables.forEach(tid => {
+        const seats = SEAT_MAP[tid] || 2;
+        secCap += seats;
+        if (floor.splits[tid]) {
+          // Split table: check each half independently
+          const letters = floor.splits[tid].letters || ['A','B'];
+          letters.forEach(l => {
+            const hs = floor.tables[tid + l];
+            if (hs?.occupied) {
+              secSeats  += Math.round(seats / letters.length);
+              secCovers += hs.covers || 0;
+              if (hs.seatedAt && now - hs.seatedAt >= OT_MS) secOT++;
+            }
+          });
+        } else {
+          const ts = floor.tables[tid];
+          if (ts?.occupied) {
+            secSeats  += seats;
+            secCovers += ts.covers || 0;
+            if (ts.seatedAt && now - ts.seatedAt >= OT_MS) secOT++;
+          }
+        }
+      });
+    });
+    const secPct = secCap > 0 ? Math.round(secSeats / secCap * 100) : 0;
+
+    html += `<div class="sec-group">
+      <div class="sec-hdr" onclick="toggleSection(${sec})" style="background:${col}1a;border:1px solid ${col}38;">
+        <div class="sec-hdr-label" style="color:${col}">Section ${sec}</div>
+        <div class="sec-hdr-stats">
+          <span>${secPct}%</span>
+          <span>${secCovers} cvr</span>
+          ${secOT > 0 ? `<span style="color:var(--s2)">⏱${secOT}</span>` : ''}
+        </div>
+        <span class="sec-arrow ${isCollapsed ? '' : 'open'}" id="sec-arrow-${sec}">▶</span>
+      </div>
+      <div class="sec-cards ${isCollapsed ? 'collapsed' : ''}" id="sec-cards-${sec}" style="max-height:${secStations.length * 78}px">`;
+
+    secStations.forEach(st => {
+      let occSeats = 0, totalSeats = 0, covers = 0, maxTurns = 0, overtime = 0;
+      st.tables.forEach(tid => {
+        const seats = SEAT_MAP[tid] || 2;
+        const tc    = floor.turnCounts[tid] || 0;
+        totalSeats += seats;
+        if (tc > maxTurns) maxTurns = tc;
+        if (floor.splits[tid]) {
+          // Split table: count each occupied half separately
+          const letters = floor.splits[tid].letters || ['A','B'];
+          letters.forEach(l => {
+            const hs = floor.tables[tid + l];
+            const tc2 = floor.turnCounts[tid + l] || 0;
+            if (tc2 > maxTurns) maxTurns = tc2;
+            if (hs?.occupied) {
+              occSeats += Math.round(seats / letters.length);
+              covers   += hs.covers || 0;
+              if (hs.seatedAt && now - hs.seatedAt >= OT_MS) overtime++;
+            }
+          });
+        } else {
+          const ts = floor.tables[tid];
+          if (ts?.occupied) {
+            occSeats += seats;
+            covers   += ts.covers || 0;
+            if (ts.seatedAt && now - ts.seatedAt >= OT_MS) overtime++;
+          }
+        }
+      });
+
+      const pct      = totalSeats > 0 ? Math.round(occSeats / totalSeats * 100) : 0;
+      const barColor = pct >= 85 ? 'var(--s2)' : pct >= 60 ? 'var(--gold)' : col;
+
+      html += `<div class="st-card">
+        <div class="st-hdr">
+          <div class="st-num" style="background:${col}18;color:${col};border:1px solid ${col}38">${st.st}</div>
+          <div>
+            <div class="st-detail">${occSeats}/${totalSeats} seats · ${st.tables.length} tbl</div>
+            <div class="st-detail">🔄 ${maxTurns > 0 ? maxTurns + 't' : '—'}</div>
+          </div>
+          <div style="margin-left:auto;text-align:right">
+            <div class="st-covers">${covers}</div>
+            <div class="st-covers-lbl">covers</div>
+          </div>
+        </div>
+        <div class="st-bar-wrap"><div class="st-bar" style="width:${pct}%;background:${barColor}"></div></div>
+        ${overtime > 0 ? `<div class="st-ot">⏱ ${overtime} table${overtime > 1 ? 's' : ''} overtime</div>` : ''}
+      </div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  grid.innerHTML = html;
+}
+
+// ── Popup (hover / click detail) ─────────────────────────────────────────
+function showPopup(id, e, pin) {
+  const td     = TD.find(t => t.id === id);
+  const splits = floor.splits || {};
+  const pop    = document.getElementById('popup');
+  let html     = `<div class="pp-title">TABLE ${id}${splits[id] ? ' — SPLIT' : ''}</div>`;
+
+  if (splits[id]) {
+    const letters = splits[id].letters || ['A', 'B'];
+    html += '<div class="pp-halves">';
+    letters.forEach(l => {
+      const hs  = floor.tables[id + l] || { occupied: false };
+      const col = hs.occupied ? TURN_COLORS[hs.seating] : 'var(--dim)';
+      html += `<div class="pp-half">
+        <div style="color:${col};font-weight:600;margin-bottom:3px">${id + l} — ${hs.occupied ? TURN_NAMES[hs.seating] : 'Avail'}</div>`;
+      if (hs.occupied) {
+        if (hs.covers) html += `<div style="color:var(--mid)">${hs.covers} cvr</div>`;
+        if (hs.staterooms?.length) html += `<div style="color:var(--mid)">${hs.staterooms.join(', ')}</div>`;
+        const el = elapsed(hs.seatedAt);
+        if (el) html += `<div style="color:${col}">${el}</div>`;
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  } else {
+    const ts = floor.tables[id];
+    html += `<div class="pp-row"><span>Seats</span><span class="pp-val">${td ? td.s : '?'}</span></div>`;
+    if (ts?.occupied) {
+      const col = TURN_COLORS[ts.seating] || 'var(--text)';
+      html += `<div class="pp-row"><span>Status</span><span class="pp-val" style="color:${col}">${TURN_NAMES[ts.seating] || '—'}</span></div>`;
+      if (ts.covers)             html += `<div class="pp-row"><span>Covers</span><span class="pp-val">${ts.covers}</span></div>`;
+      if (ts.staterooms?.length) html += `<div class="pp-row"><span>Cabin</span><span class="pp-val">${ts.staterooms.join(', ')}</span></div>`;
+      const el = elapsed(ts.seatedAt);
+      if (el) html += `<div class="pp-row"><span>Elapsed</span><span class="pp-val" style="color:${col}">${el}</span></div>`;
+      if (ts.sharing) html += `<div style="color:var(--teal);font-size:8.5px;margin-top:5px">⟳ Sharing Table</div>`;
+    } else {
+      html += `<div class="pp-row"><span>Status</span><span class="pp-val" style="color:var(--teal)">Available</span></div>`;
+    }
+  }
+
+  pop.innerHTML = html;
+  pop.classList.add('show');
+  if (pin) pinned = true;
+  movePopup(e);
+}
+
+function movePopup(e) {
+  if (pinned) return;
+  const pop = document.getElementById('popup');
+  if (!pop.classList.contains('show')) return;
+  let x = e.clientX + 14, y = e.clientY - 10;
+  if (x + 200 > window.innerWidth)  x = e.clientX - 210;
+  if (y + 200 > window.innerHeight) y = e.clientY - 200;
+  pop.style.left = x + 'px';
+  pop.style.top  = y + 'px';
+}
+
+function hidePopup(force) {
+  if (pinned && !force) return;
+  pinned = false;
+  document.getElementById('popup').classList.remove('show');
+}
+
+// ── Broadcasts ───────────────────────────────────────────────────────────
+function renderBroadcasts() {
+  const el    = document.getElementById('bc-feed');
+  const empty = document.getElementById('bc-feed-empty');
+  if (!bcItems.length) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  // Rebuild fully — broadcast updates are infrequent
+  el.innerHTML = bcItems.map(item => {
+    const t      = item.ts ? new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const date   = item.ts ? new Date(item.ts).toLocaleDateString([], { day: '2-digit', month: 'short' }) : '';
+    const sender = (item.sender || 'Management').toUpperCase();
+    const hasPhoto = !!item.photoData;
+    const replyChip = item.replyTo
+      ? `<span style="font-size:8px;color:var(--mid);margin-left:5px">↩ reply</span>`
+      : '';
+    const photoHtml = hasPhoto
+      ? `<div class="bc-photo"><img src="${item.photoData}" alt="photo" onclick="monOpenPhoto(this.src)"></div>`
+      : '';
+    return `<div class="bc-item${hasPhoto ? ' has-photo' : ''}">
+      <div class="bc-time">${date} ${t}</div>
+      <div class="bc-sender">${sender}${replyChip}</div>
+      <div class="bc-text">${item.msg || ''}</div>
+      ${photoHtml}
+    </div>`;
+  }).join('');
+}
+
+// ── Chef's Table panel ────────────────────────────────────────────────────
+function renderCT() {
+  const el  = document.getElementById('ct-panel');
+  if (!el) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const ids   = Object.keys(ctEvents);
+
+  // Show events within ±3 days of today, sorted by date
+  const nearby = ids
+    .filter(id => {
+      const d = ctEvents[id].date || '';
+      return d >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+          && d <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    })
+    .sort((a, b) => (ctEvents[a].date || '').localeCompare(ctEvents[b].date || ''));
+
+  if (!nearby.length) {
+    el.innerHTML = '<div class="empty-msg">No events in the next 7 days</div>';
+    return;
+  }
+
+  el.innerHTML = nearby.map(id => {
+    const ev      = ctEvents[id];
+    const gCount  = ev.guests ? Object.keys(ev.guests).length : 0;
+    const seats   = ev.seatCount || 12;
+    const st      = ev.status || 'draft';
+    const d       = ev.date ? new Date(ev.date + 'T00:00:00') : null;
+    const pretty  = d ? d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) : 'No date';
+    const isToday = ev.date === today;
+    const dotCol  = st === 'confirmed' ? 'var(--teal)' : st === 'cancelled' ? 'var(--s2)' : 'var(--gold)';
+    const badgeCls = st === 'confirmed' ? 'ct-badge-confirmed' : st === 'cancelled' ? 'ct-badge-cancelled' : 'ct-badge-draft';
+    return `<div class="ct-event-row">
+      <div class="ct-status-dot" style="background:${dotCol}"></div>
+      <div class="ct-ev-info">
+        <div class="ct-ev-name">${isToday ? '★ ' : ''}${pretty}</div>
+        <div class="ct-ev-sub">${gCount} / ${seats} guests${ev.notes ? ' · ' + ev.notes.slice(0, 30) : ''}</div>
+      </div>
+      <div class="ct-ev-badge ${badgeCls}">${st.toUpperCase()}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Photo lightbox (monitor) ──────────────────────────────────────────────
+function monOpenPhoto(src) {
+  let lb = document.getElementById('mon-lightbox');
+  if (!lb) {
+    lb = document.createElement('div');
+    lb.id = 'mon-lightbox';
+    lb.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+    lb.onclick = () => lb.remove();
+    document.body.appendChild(lb);
+  }
+  lb.innerHTML = `<img src="${src}" style="max-width:95vw;max-height:92vh;border-radius:6px;box-shadow:0 4px 40px #000a;">`;
+}
+
+// ── 60-second refresh for overtime + station tickers ─────────────────────
+// (Firebase listener handles all data changes; this only updates time-based
+//  displays like elapsed times and overtime flags without a round-trip)
+setInterval(() => {
+  renderHeatmap();
+  renderSidebar();
+  renderStations();
+}, 60000);
+</script>
+</body>
+</html>

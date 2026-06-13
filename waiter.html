@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#03060f">
+<title>Eclipse · Deck 7 — Waiter</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ── Reset & Variables ─────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:         #03060f;
+    --bg2:        #080d1a;
+    --bg3:        #0d1424;
+    --border:     rgba(80,120,200,0.2);
+    --border2:    rgba(80,120,200,0.12);
+    --gold:       #c9a84c;
+    --gold-dim:   rgba(201,168,76,0.12);
+    --text:       rgba(220,235,255,0.92);
+    --text-dim:   rgba(140,170,210,0.6);
+    --text-mid:   rgba(180,205,240,0.75);
+    --teal:       #22d3ee;
+    --teal-dim:   rgba(34,211,238,0.12);
+    --green:      #22c55e;
+    --green-dim:  rgba(34,197,94,0.12);
+    --amber:      #f59e0b;
+    --amber-dim:  rgba(245,158,11,0.12);
+    --red:        #ef4444;
+    --red-dim:    rgba(239,68,68,0.12);
+    --s1:         #f4a261;
+    --s1-bg:      rgba(244,162,97,0.22);
+    --s2:         #e63946;
+    --s2-bg:      rgba(230,57,70,0.22);
+    --s3:         #7b2fbe;
+    --s3-bg:      rgba(123,47,190,0.22);
+    --header-h:   72px;
+  }
+
+  html, body {
+    height: 100%; width: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ────────────────────────────────────────────────── */
+  #app { display: flex; flex-direction: column; height: 100%; }
+
+  /* ── Header ────────────────────────────────────────────────── */
+  #header {
+    height: var(--header-h);
+    background: linear-gradient(180deg, #060c1e 0%, var(--bg2) 100%);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 16px; gap: 12px;
+    flex-shrink: 0;
+  }
+  #header-left { flex: 1; }
+  #title-line {
+    font-family: 'Cinzel', serif;
+    font-size: 13px; font-weight: 600;
+    color: var(--gold); letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  #station-line {
+    font-size: 10px; color: var(--text-dim);
+    margin-top: 2px; letter-spacing: 0.5px;
+  }
+  #conn-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--red); flex-shrink: 0;
+    transition: background 0.4s;
+  }
+  #conn-dot.connected { background: var(--green); }
+  #user-badge {
+    background: var(--gold-dim); border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 5px; padding: 4px 10px;
+    font-size: 10px; color: var(--gold); letter-spacing: 0.5px;
+  }
+
+  /* ── Table grid ────────────────────────────────────────────── */
+  #grid-wrap {
+    flex: 1; overflow-y: auto; padding: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+  #table-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  /* ── Table card ────────────────────────────────────────────── */
+  .tc {
+    background: var(--bg3);
+    border: 1.5px solid var(--border2);
+    border-radius: 10px;
+    padding: 10px 8px 8px;
+    display: flex; flex-direction: column; gap: 6px;
+    transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
+    min-height: 108px;
+  }
+  .tc.occ1 { border-color: rgba(244,162,97,0.5); background: rgba(244,162,97,0.05); }
+  .tc.occ2 { border-color: rgba(230,57,70,0.5);  background: rgba(230,57,70,0.05);  }
+  .tc.occ3 { border-color: rgba(123,47,190,0.5); background: rgba(123,47,190,0.05); }
+  .tc.blocked { border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.05); }
+
+  .tc-id {
+    font-size: 15px; font-weight: 600; color: var(--text);
+    line-height: 1; letter-spacing: -0.3px;
+  }
+  .tc-status {
+    font-size: 8.5px; color: var(--text-dim);
+    letter-spacing: 0.4px; min-height: 12px;
+  }
+  .tc.occ1 .tc-status { color: var(--s1); }
+  .tc.occ2 .tc-status { color: var(--s2); }
+  .tc.occ3 .tc-status { color: var(--s3); }
+  .tc.blocked .tc-status { color: var(--gold); }
+
+  .tc-actions {
+    display: flex; flex-direction: column; gap: 4px; margin-top: auto;
+  }
+  .ta {
+    width: 100%; padding: 6px 4px;
+    border-radius: 5px; border: 1px solid;
+    font-family: 'DM Mono', monospace;
+    font-size: 8px; font-weight: 600;
+    letter-spacing: 0.5px; cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    text-align: center; line-height: 1.2;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ta:active { opacity: 0.7; transform: scale(0.97); }
+  .ta.reset-btn {
+    background: var(--red-dim); border-color: rgba(239,68,68,0.45);
+    color: var(--red);
+  }
+  .ta.ready-btn {
+    background: var(--green-dim); border-color: rgba(34,197,94,0.45);
+    color: var(--green);
+  }
+  .ta.mgr-btn {
+    background: var(--amber-dim); border-color: rgba(245,158,11,0.4);
+    color: var(--amber);
+  }
+  .ta:disabled {
+    opacity: 0.3; cursor: default;
+    pointer-events: none;
+  }
+
+  /* Recently sent — flash to confirm */
+  @keyframes sent-flash {
+    0%   { opacity: 1; }
+    30%  { opacity: 0.2; }
+    100% { opacity: 1; }
+  }
+  .tc.sent { animation: sent-flash 0.5s ease; }
+
+  /* ── Footer stats bar ──────────────────────────────────────── */
+  #footer {
+    height: 44px; flex-shrink: 0;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; gap: 24px;
+    padding: 0 16px;
+  }
+  .stat { font-size: 9px; color: var(--text-dim); letter-spacing: 0.5px; }
+  .stat span { color: var(--text); font-weight: 600; margin-left: 4px; }
+
+  /* ── Identity prompt ───────────────────────────────────────── */
+  #prompt-overlay {
+    position: fixed; inset: 0; z-index: 900;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  #prompt-box {
+    width: 100%; max-width: 340px;
+  }
+  #prompt-title {
+    font-family: 'Cinzel', serif;
+    font-size: 15px; color: var(--gold);
+    letter-spacing: 2.5px; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  #prompt-sub {
+    font-size: 9px; color: var(--text-dim); letter-spacing: 0.5px;
+    margin-bottom: 28px;
+  }
+  .prompt-label {
+    font-size: 9px; color: var(--text-dim); letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  .prompt-input {
+    width: 100%; padding: 13px 14px;
+    background: var(--bg3);
+    border: 1.5px solid var(--border2);
+    border-radius: 7px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 14px;
+    outline: none; margin-bottom: 16px;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  .prompt-input:focus { border-color: rgba(201,168,76,0.6); }
+  .prompt-input::placeholder { color: var(--text-dim); }
+
+  /* Station grid in prompt */
+  #station-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px;
+    margin-bottom: 20px;
+  }
+  .sg-btn {
+    padding: 11px 6px;
+    background: var(--bg3); border: 1.5px solid var(--border2);
+    border-radius: 7px; color: var(--text-mid);
+    font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 600;
+    cursor: pointer; text-align: center;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sg-btn:active { transform: scale(0.95); }
+  .sg-btn.selected {
+    background: var(--gold-dim); border-color: rgba(201,168,76,0.7);
+    color: var(--gold);
+  }
+  /* Section labels */
+  .sg-section {
+    font-size: 8px; color: var(--text-dim); letter-spacing: 1px;
+    text-transform: uppercase; grid-column: 1 / -1;
+    padding: 4px 0 2px;
+  }
+
+  #prompt-go {
+    width: 100%; padding: 14px;
+    background: var(--gold); border: none; border-radius: 7px;
+    color: #1a0a00; font-family: 'DM Mono', monospace;
+    font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  #prompt-go:disabled { opacity: 0.3; cursor: default; }
+  #prompt-go:active { opacity: 0.8; }
+
+  /* ── Toast ─────────────────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 54px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(20,30,55,0.96); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 18px;
+    font-size: 11px; color: var(--text);
+    opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none; white-space: nowrap; z-index: 800;
+  }
+  #toast.show {
+    opacity: 1; transform: translateX(-50%) translateY(0);
+  }
+
+  /* scrollbar */
+  #grid-wrap::-webkit-scrollbar { width: 3px; }
+  #grid-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Identity prompt -->
+<div id="prompt-overlay">
+  <div id="prompt-box">
+    <div id="prompt-title">Eclipse · Deck 7</div>
+    <div id="prompt-sub">WAITER PANEL — identify yourself to continue</div>
+
+    <div class="prompt-label">Your name</div>
+    <input class="prompt-input" id="name-input" type="text"
+      placeholder="e.g. Marco" maxlength="30" autocomplete="off" autocorrect="off">
+
+    <div class="prompt-label">Your station</div>
+    <div id="station-grid"></div>
+
+    <button id="prompt-go" disabled onclick="startApp()">START SERVICE</button>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="app" style="display:none;">
+  <div id="header">
+    <div id="header-left">
+      <div id="title-line">Eclipse · Deck 7</div>
+      <div id="station-line">Loading…</div>
+    </div>
+    <div id="user-badge">—</div>
+    <div id="conn-dot"></div>
+  </div>
+
+  <div id="grid-wrap">
+    <div id="table-grid"></div>
+  </div>
+
+  <div id="footer">
+    <div class="stat">SEATED <span id="stat-seated">0</span></div>
+    <div class="stat">AVAILABLE <span id="stat-avail">0</span></div>
+    <div class="stat">MY TABLES <span id="stat-total">0</span></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Firebase ──────────────────────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey:      "AIzaSyDNIpnIuJIF1guVUydbAmo_vV7OBNl3a28",
+  authDomain:  "eclipse-floor.firebaseapp.com",
+  databaseURL: "https://eclipse-floor-default-rtdb.firebaseio.com",
+  projectId:   "eclipse-floor",
+  appId:       "1:726505687250:web:4a80333510fa6308ec450b",
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+// ── Station data ──────────────────────────────────────────────────────────
+const SECTIONS = {
+  '49':['301','302','303','306','307','308','309'],
+  '50':['317','318','319','320','321'],
+  '51':['304','305','310','312','313','314','315'],
+  '53':['316','356','357','407','408','409','410','411'],
+  '54':['324','325','326','327','328','329','330'],
+  '55':['350','351','352','353','354','355','412'],
+  '56':['331','332','333','334','335','336','337'],
+  '57':['338','339','340','346','347'],
+  '58':['341','342','343','344','345','348','349'],
+  '59':['413','414','415','416','420'],
+  '67':['560','561','562','563','564'],
+  '68':['553','554','555','556','557','558'],
+  '69':['548','549','550','551','552'],
+  '70':['542','543','544','545','546','547'],
+  '71':['525','536','537','538','539','540','541'],
+  '72':['520','521','524','526','534'],
+  '73':['518','519','530','531','532','533'],
+  '74':['510','511','512','513','514','515','517'],
+  '75':['509','527'],
+  '76':['500','501','502','503','504','505','506'],
+  '52':['311','401','402','403','404','406'],
+  '60':['421','423','424','434','435','436','437'],
+  '61':['425','426','427','432','433','438','439'],
+  '62':['428','429','430','431','440','441','442'],
+  '63':['405','452','453','454'],
+  '64':['444','445','446','447','448'],
+  '65':['443','565','566','568','569','570','571','572'],
+  '66':['417','418','419','422','559','567'],
+  '77':['449','451','450','516','522','523','573'],
+};
+
+const SECTION_7 = ['49','50','51','53','54','55','56','57','58','59'];
+const SECTION_8 = ['67','68','69','70','71','72','73','74','75','76'];
+const SECTION_9 = ['52','60','61','62','63','64','65','66','77'];
+
+// ── App state ─────────────────────────────────────────────────────────────
+let WAITER_NAME    = '';
+let STATION_ID     = '';
+let MY_TABLES      = [];
+let floorState     = {};   // tableId → Firebase table state
+let _signalCooldowns = {}; // tableId → last signal ts (debounce)
+
+const PREFS_KEY = 'eclipse_waiter_prefs';
+
+// ── Persistence ───────────────────────────────────────────────────────────
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    if (p.name && p.station && SECTIONS[p.station]) {
+      WAITER_NAME = p.name;
+      STATION_ID  = p.station;
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      name: WAITER_NAME, station: STATION_ID
+    }));
+  } catch(e) {}
+}
+
+// ── Prompt UI ─────────────────────────────────────────────────────────────
+function buildPrompt() {
+  const grid = document.getElementById('station-grid');
+  const sections = [
+    { label: 'Section 7', ids: SECTION_7 },
+    { label: 'Section 8', ids: SECTION_8 },
+    { label: 'Section 9', ids: SECTION_9 },
+  ];
+
+  sections.forEach(sec => {
+    const lbl = document.createElement('div');
+    lbl.className = 'sg-section';
+    lbl.textContent = sec.label;
+    grid.appendChild(lbl);
+
+    sec.ids.forEach(id => {
+      const btn = document.createElement('button');
+      btn.className = 'sg-btn';
+      btn.textContent = id;
+      btn.dataset.station = id;
+      btn.onclick = () => selectStation(id);
+      grid.appendChild(btn);
+    });
+  });
+
+  // Name input validation
+  document.getElementById('name-input').addEventListener('input', validatePrompt);
+}
+
+function selectStation(id) {
+  document.querySelectorAll('.sg-btn').forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector(`.sg-btn[data-station="${id}"]`);
+  if (btn) btn.classList.add('selected');
+  STATION_ID = id;
+  validatePrompt();
+}
+
+function validatePrompt() {
+  const name = document.getElementById('name-input').value.trim();
+  document.getElementById('prompt-go').disabled = !name || !STATION_ID;
+}
+
+function startApp() {
+  WAITER_NAME = document.getElementById('name-input').value.trim();
+  if (!WAITER_NAME || !STATION_ID) return;
+  savePrefs();
+  launchApp();
+}
+
+// ── App launch ────────────────────────────────────────────────────────────
+function launchApp() {
+  MY_TABLES = SECTIONS[STATION_ID] || [];
+
+  document.getElementById('prompt-overlay').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  document.getElementById('user-badge').textContent = WAITER_NAME;
+  document.getElementById('station-line').textContent =
+    'Station ' + STATION_ID + ' · ' + MY_TABLES.length + ' tables';
+  document.getElementById('stat-total').textContent = MY_TABLES.length;
+
+  buildGrid();
+  subscribeFirebase();
+  updatePresence();
+}
+
+// ── Table grid ────────────────────────────────────────────────────────────
+function buildGrid() {
+  const grid = document.getElementById('table-grid');
+  grid.innerHTML = '';
+
+  MY_TABLES.forEach(tid => {
+    const card = document.createElement('div');
+    card.className = 'tc';
+    card.id = 'tc-' + tid;
+    card.innerHTML = `
+      <div class="tc-id">${tid}</div>
+      <div class="tc-status" id="ts-${tid}">Available</div>
+      <div class="tc-actions">
+        <button class="ta reset-btn" onclick="sendSignal('${tid}','reset')"
+          title="Table cleared — needs reset team">🔴 RESET NEEDED</button>
+        <button class="ta ready-btn" onclick="sendSignal('${tid}','ready')"
+          title="Table set — ready to seat">🟢 TABLE READY</button>
+        <button class="ta mgr-btn"   onclick="sendSignal('${tid}','manager')"
+          title="Need manager at this table">🟡 NEED MANAGER</button>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function updateCard(tid) {
+  const ts  = floorState[tid] || {};
+  const card = document.getElementById('tc-' + tid);
+  const lbl  = document.getElementById('ts-' + tid);
+  if (!card || !lbl) return;
+
+  // Reset classes
+  card.className = 'tc';
+  let statusText = 'Available';
+
+  if (ts.blocked) {
+    card.classList.add('blocked');
+    statusText = '⊘ Blocked';
+  } else if (ts.occupied) {
+    const turn = ts.seating || 1;
+    card.classList.add('occ' + turn);
+    const turnLabel = turn === 1 ? '1st' : turn === 2 ? '2nd' : '3rd';
+    const covers = ts.covers ? ts.covers + ' cvr · ' : '';
+    // Elapsed time
+    let elapsed = '';
+    if (ts.seatedAt) {
+      const mins = Math.round((Date.now() - ts.seatedAt) / 60000);
+      elapsed = ' · ' + mins + 'min';
+    }
+    statusText = covers + turnLabel + ' turn' + elapsed;
+  }
+
+  lbl.textContent = statusText;
+
+  // Disable RESET and READY if table not occupied / already available
+  const resetBtn = card.querySelector('.reset-btn');
+  const readyBtn = card.querySelector('.ready-btn');
+  if (resetBtn) resetBtn.disabled = !ts.occupied;
+  if (readyBtn) readyBtn.disabled = ts.occupied || ts.blocked;
+}
+
+function updateStats() {
+  let seated = 0, avail = 0;
+  MY_TABLES.forEach(tid => {
+    const ts = floorState[tid] || {};
+    if (ts.occupied) seated++;
+    else if (!ts.blocked) avail++;
+  });
+  document.getElementById('stat-seated').textContent = seated;
+  document.getElementById('stat-avail').textContent  = avail;
+}
+
+// ── Firebase subscription ─────────────────────────────────────────────────
+function subscribeFirebase() {
+  db.ref('eclipse/deck7/floor/tables').on('value', snap => {
+    const all = snap.val() || {};
+    // Only store our tables
+    MY_TABLES.forEach(tid => {
+      floorState[tid] = all[tid] || {};
+      updateCard(tid);
+    });
+    updateStats();
+  });
+
+  db.ref('.info/connected').on('value', snap => {
+    const dot = document.getElementById('conn-dot');
+    if (snap.val()) dot.classList.add('connected');
+    else            dot.classList.remove('connected');
+  });
+}
+
+// ── Presence ──────────────────────────────────────────────────────────────
+function updatePresence() {
+  const presRef = db.ref('eclipse/deck7/presence/' + WAITER_NAME + '-W' + STATION_ID);
+  presRef.set({ name: WAITER_NAME, station: STATION_ID, role: 'waiter', ts: Date.now() });
+  presRef.onDisconnect().remove();
+  // Refresh every 5 min to keep alive
+  setInterval(() => presRef.update({ ts: Date.now() }), 5 * 60 * 1000);
+}
+
+// ── Signal sending ────────────────────────────────────────────────────────
+const SIGNAL_LABELS = {
+  reset:   'Reset needed',
+  ready:   'Table ready',
+  manager: 'Need manager',
+};
+
+function sendSignal(tableId, type) {
+  // Debounce — prevent double-tap spam (10 second cooldown per table+type)
+  const key = tableId + ':' + type;
+  const last = _signalCooldowns[key] || 0;
+  if (Date.now() - last < 10000) {
+    showToast('Signal already sent — please wait');
+    return;
+  }
+  _signalCooldowns[key] = Date.now();
+
+  const payload = {
+    tableId,
+    type,
+    label:   SIGNAL_LABELS[type] || type,
+    sender:  WAITER_NAME,
+    station: STATION_ID,
+    ts:      Date.now(),
+    nonce:   Math.random().toString(36).slice(2),
+  };
+
+  db.ref('eclipse/deck7/waiter-signals').set(payload)
+    .then(() => {
+      // Flash the card to confirm
+      const card = document.getElementById('tc-' + tableId);
+      if (card) {
+        card.classList.add('sent');
+        setTimeout(() => card.classList.remove('sent'), 600);
+      }
+      showToast(SIGNAL_LABELS[type] + ' — sent to manager');
+    })
+    .catch(() => showToast('Failed to send — check connection'));
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── Timer — update elapsed times every 60s ────────────────────────────────
+setInterval(() => MY_TABLES.forEach(tid => updateCard(tid)), 60 * 1000);
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+buildPrompt();
+
+if (loadPrefs()) {
+  // Pre-fill name and select station if returning user
+  document.getElementById('name-input').value = WAITER_NAME;
+  selectStation(STATION_ID);
+} else {
+  setTimeout(() => document.getElementById('name-input').focus(), 300);
+}
+</script>
+</body>
+</html>
