@@ -291,6 +291,55 @@ body {
 .s-legend .s2d { background: var(--s2); }
 .s-legend .s3d { background: var(--s3); }
 
+/* ── Toolbar arc meters ── */
+.meter-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+  flex-shrink: 0;
+  position: relative;
+}
+.meter-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 6.5px;
+  letter-spacing: 2px;
+  color: rgba(201,168,76,0.45);
+  text-transform: uppercase;
+  margin-bottom: -2px;
+}
+.meter-arc {
+  width: 64px;
+  height: 34px;
+  overflow: visible;
+}
+.meter-track {
+  fill: none;
+  stroke: rgba(255,255,255,0.07);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+.meter-fill {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 113.1;
+  stroke-dashoffset: 113.1;
+  transition: stroke-dashoffset 1s cubic-bezier(0.34,1.1,0.64,1), stroke 0.7s ease;
+}
+.meter-dot {
+  transition: cx 1s cubic-bezier(0.34,1.1,0.64,1), cy 1s cubic-bezier(0.34,1.1,0.64,1), fill 0.7s ease, filter 0.7s ease;
+}
+.meter-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 1px;
+  margin-top: 0px;
+  transition: color 0.7s ease;
+}
+
 .action-group { display: flex; gap: 5px; }
 
 .a-btn {
@@ -2882,6 +2931,28 @@ body.fs-mode #fs-hud { animation: hud-in 0.35s cubic-bezier(.2,.8,.3,1) both; }
     <div class="stat"><span class="num" id="stat-seated">—</span>SEATED</div>
     <div class="stat"><span class="num" id="stat-comb">—</span>COMBINED</div>
     <div class="stat"><span class="num" id="stat-covers">—</span>COVERS</div>
+  </div>
+  <div class="sep"></div>
+  <!-- Occupancy meter -->
+  <div class="meter-wrap">
+    <div class="meter-label">CAPACITY</div>
+    <svg class="meter-arc" viewBox="0 0 80 50" overflow="visible">
+      <path class="meter-track" d="M 4,46 A 36,36 0 0 1 76,46"/>
+      <path class="meter-fill" id="mocc-fill" d="M 4,46 A 36,36 0 0 1 76,46" stroke="#c9a84c" style="filter:drop-shadow(0 0 4px #c9a84c88)"/>
+      <circle class="meter-dot" id="mocc-dot" r="4" fill="#c9a84c" cx="4" cy="46" style="filter:drop-shadow(0 0 7px #c9a84c)"/>
+    </svg>
+    <div class="meter-val" id="mocc-val" style="color:#c9a84c">0%</div>
+  </div>
+  <div class="sep"></div>
+  <!-- Stress/Tempo meter -->
+  <div class="meter-wrap">
+    <div class="meter-label">TEMPO</div>
+    <svg class="meter-arc" viewBox="0 0 80 50" overflow="visible">
+      <path class="meter-track" d="M 4,46 A 36,36 0 0 1 76,46"/>
+      <path class="meter-fill" id="mstr-fill" d="M 4,46 A 36,36 0 0 1 76,46" stroke="#2dd4bf" style="filter:drop-shadow(0 0 4px #2dd4bf88)"/>
+      <circle class="meter-dot" id="mstr-dot" r="4" fill="#2dd4bf" cx="4" cy="46" style="filter:drop-shadow(0 0 7px #2dd4bf)"/>
+    </svg>
+    <div class="meter-val" id="mstr-val" style="color:#2dd4bf">QUIET</div>
   </div>
 </div>
 
@@ -8749,6 +8820,58 @@ function elapsed(ts) {
   return Math.floor(m / 60) + 'h' + (m % 60).toString().padStart(2, '0') + 'm';
 }
 
+// Arc meter constants — semicircle path M 4,46 A 36,36 0 0 1 76,46
+// center=(40,46) r=36, arc-length=π×36≈113.1, sweep clockwise left→right
+const _METER_ARC_LEN = 113.1;
+const _METER_CX = 40, _METER_CY = 46, _METER_R = 36;
+
+function _setMeterArc(fillId, dotId, pct, color) {
+  const fill = document.getElementById(fillId);
+  const dot  = document.getElementById(dotId);
+  if (!fill || !dot) return;
+  const offset = (_METER_ARC_LEN * (1 - Math.max(0, Math.min(1, pct)))).toFixed(2);
+  fill.style.strokeDashoffset = offset;
+  fill.style.stroke = color;
+  fill.style.filter = 'drop-shadow(0 0 4px ' + color + '88)';
+  dot.style.fill = color;
+  dot.style.filter = 'drop-shadow(0 0 7px ' + color + ')';
+  // Dot position: angle goes from π (left, pct=0) to 0 (right, pct=1)
+  const angle = Math.PI * (1 - Math.max(0, Math.min(1, pct)));
+  const cx = (_METER_CX + _METER_R * Math.cos(angle)).toFixed(2);
+  const cy = (_METER_CY - _METER_R * Math.sin(angle)).toFixed(2);
+  dot.setAttribute('cx', cx);
+  dot.setAttribute('cy', cy);
+}
+
+function _updateMeters() {
+  // Occupancy: seated / total open tables
+  let seated = 0, total = 0;
+  TABLE_DATA.forEach(td => {
+    if (state.splits[td.id]) {
+      (state.splits[td.id].letters || ['A','B']).forEach(l => {
+        total++;
+        if (state.tables[td.id + l]?.occupied) seated++;
+      });
+    } else if (!isTableInClosedStation(td.id)) {
+      total++;
+      if (state.tables[td.id]?.occupied) seated++;
+    }
+  });
+  const occ = total > 0 ? seated / total : 0;
+  _setMeterArc('mocc-fill', 'mocc-dot', occ, '#c9a84c');
+  const occValEl = document.getElementById('mocc-val');
+  if (occValEl) { occValEl.textContent = Math.round(occ * 100) + '%'; occValEl.style.color = '#c9a84c'; }
+
+  // Stress/Tempo: 0–1 from computeActivityScore()
+  let stress = 0;
+  try { stress = computeActivityScore(); } catch(e) {}
+  const stressColor = stress < 0.40 ? '#2dd4bf' : stress < 0.68 ? '#f59e0b' : '#ef4444';
+  const stressLabel = stress < 0.22 ? 'QUIET' : stress < 0.48 ? 'STEADY' : stress < 0.72 ? 'BUSY' : 'PEAK';
+  _setMeterArc('mstr-fill', 'mstr-dot', stress, stressColor);
+  const strValEl = document.getElementById('mstr-val');
+  if (strValEl) { strValEl.textContent = stressLabel; strValEl.style.color = stressColor; }
+}
+
 function updateStats() {
   let avail = 0, seated = 0, covers = 0;
   const combinedSet = new Set(state.combinations.flat());
@@ -8772,6 +8895,9 @@ function updateStats() {
   // Animate numbers that changed
   if (seated !== prevSeated) _bumpStat('stat-seated');
   if (covers !== prevCovers) _bumpStat('stat-covers');
+
+  // Update arc meters
+  _updateMeters();
 
   // Sync fullscreen HUD
   const fsSeat  = document.getElementById('fs-seated');
