@@ -3513,36 +3513,99 @@ const _splash = (function() {
   const _stat = document.getElementById('splash-status');
   const _img  = document.getElementById('splash-img');
 
-  // Load the splash image if provided
-  if (SPLASH_IMAGE_URL) {
-    _img.oncanplay = function() { _img.classList.add('loaded'); };
-    _img.onerror = function() { _img.style.display = 'none'; };
-    _img.src = SPLASH_IMAGE_URL;
-  }
-
   const _statMessages = ['Connecting…', 'Loading floor data…', 'Syncing tables…', 'Almost ready…'];
   let _statIdx = 0;
+  let _tick = null;
 
-  // Progress bar: ramps to 85% organically, then jumps to 100% on dismiss
-  const _tick = setInterval(function() {
-    if (_dismissed) return;
-    if (_barPct < 85) {
-      // Exponential ease-in — fast at first, slows as it approaches 85
-      _barPct = Math.min(85, _barPct + (85 - _barPct) * 0.07 + 0.3);
-      if (_bar) _bar.style.width = _barPct.toFixed(1) + '%';
-    }
-    // Cycle status messages
-    _statIdx++;
-    if (_statIdx % 4 === 0 && _stat) {
-      const msgIdx = Math.floor(_statIdx / 4) % _statMessages.length;
-      _stat.textContent = _statMessages[msgIdx];
-    }
-  }, 280);
+  // Calming startup melody — gentle ascending arpeggio using Web Audio API
+  function _playMelody() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      // Soft pentatonic ascent: G4 B4 D5 G5 B5
+      const notes  = [392, 494, 587, 784, 988];
+      const t0     = ctx.currentTime + 0.05;
+      notes.forEach(function(freq, i) {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const t = t0 + i * 0.38;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.06, t + 0.22);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
+        osc.start(t);
+        osc.stop(t + 2.1);
+      });
+    } catch(e) {}
+  }
+
+  // Begin loading bar ticks and play melody — called once the video is ready
+  function _startLoading() {
+    if (_tick) return; // guard against duplicate calls
+    _playMelody();
+    _tick = setInterval(function() {
+      if (_dismissed) return;
+      if (_barPct < 85) {
+        // Exponential ease-in — fast at first, slows as it approaches 85
+        _barPct = Math.min(85, _barPct + (85 - _barPct) * 0.07 + 0.3);
+        if (_bar) _bar.style.width = _barPct.toFixed(1) + '%';
+      }
+      // Cycle status messages
+      _statIdx++;
+      if (_statIdx % 4 === 0 && _stat) {
+        const msgIdx = Math.floor(_statIdx / 4) % _statMessages.length;
+        _stat.textContent = _statMessages[msgIdx];
+      }
+    }, 280);
+  }
+
+  // Load the animation file first; only begin loading sequence once it is ready
+  if (SPLASH_IMAGE_URL) {
+    _img.oncanplay = function() {
+      _img.classList.add('loaded');
+      _startLoading();
+    };
+    _img.onerror = function() {
+      _img.style.display = 'none';
+      _startLoading();
+    };
+    // Fallback: start loading after 1.5 s if the video never fires canplay
+    setTimeout(_startLoading, 1500);
+    _img.src = SPLASH_IMAGE_URL;
+  } else {
+    _startLoading();
+  }
+
+  // Soft chime when the table-dot wave begins (accompanies the ripple animation)
+  function _playDotChime() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx  = new AudioCtx();
+      const t0   = ctx.currentTime + 0.05;
+      // Gentle G5 bell tone
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 784;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.05, t0 + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.4);
+      osc.start(t0);
+      osc.stop(t0 + 1.5);
+    } catch(e) {}
+  }
 
   function dismiss(msg) {
     if (_dismissed) return;
     _dismissed = true;
-    clearInterval(_tick);
+    if (_tick) clearInterval(_tick);
     if (_bar)  { _bar.style.width = '100%'; }
     if (_stat) { _stat.textContent = msg || 'Ready'; }
     // Brief pause at 100% so the bar completion is visible, then fade out
@@ -3579,6 +3642,8 @@ const _splash = (function() {
         setTimeout(function() {
           const dots = Array.from(document.querySelectorAll('.tm'));
           if (!dots.length) return;
+
+          _playDotChime();
 
           const CX = 50, CY = 50;
           // READ PASS — zero DOM mutations
