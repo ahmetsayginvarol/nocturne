@@ -45,37 +45,66 @@
   pointer-events: none;
 }
 
-/* Radial gold glow behind the image */
-#splash-glow {
-  position: absolute;
-  width: 480px;
-  height: 480px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(201,168,76,0.13) 0%, transparent 70%);
-  animation: splash-pulse 3s ease-in-out infinite;
-  pointer-events: none;
+/* Star field — box-shadow dots, GPU-only opacity breathe */
+#splash-stars {
+  position: absolute; inset: 0; pointer-events: none;
+  will-change: opacity;
+  animation: stars-breathe 4s ease-in-out infinite alternate;
 }
-@keyframes splash-pulse {
-  0%, 100% { transform: scale(1);   opacity: 0.7; }
-  50%       { transform: scale(1.1); opacity: 1;   }
+@keyframes stars-breathe {
+  from { opacity: 0.3; }
+  to   { opacity: 0.85; }
 }
 
-/* Splash logo image */
+/* Primary gold glow */
+#splash-glow {
+  position: absolute;
+  width: 520px; height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(201,168,76,0.15) 0%, rgba(201,168,76,0.03) 50%, transparent 70%);
+  animation: splash-pulse 3.5s ease-in-out infinite;
+  pointer-events: none; will-change: transform, opacity;
+}
+@keyframes splash-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.65; }
+  50%       { transform: scale(1.12); opacity: 1;    }
+}
+
+/* Secondary outer ring — slow rotation, cool teal tint */
+#splash-glow2 {
+  position: absolute;
+  width: 640px; height: 640px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    transparent 42%,
+    rgba(45,212,191,0.04) 60%,
+    rgba(201,168,76,0.05) 75%,
+    transparent 100%);
+  animation: splash-ring 12s linear infinite;
+  pointer-events: none; will-change: transform;
+}
+@keyframes splash-ring {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Splash logo image — scale + fade entrance */
 #splash-img {
   width: min(72vw, 420px);
   height: min(72vw, 420px);
   object-fit: contain;
   display: block;
   opacity: 0;
-  transition: opacity 0.6s ease;
-  filter: drop-shadow(0 0 32px rgba(201,168,76,0.18));
+  transform: scale(0.91);
+  transition: opacity 0.9s ease, transform 1s cubic-bezier(0.34,1.15,0.64,1);
+  filter: drop-shadow(0 0 36px rgba(201,168,76,0.22));
 }
-#splash-img.loaded { opacity: 1; }
+#splash-img.loaded { opacity: 1; transform: scale(1); }
 
 /* Loading bar */
 #splash-bar-wrap {
   margin-top: 28px;
-  width: 180px;
+  width: 200px;
   height: 2px;
   background: rgba(201,168,76,0.08);
   border-radius: 1px;
@@ -84,33 +113,50 @@
 #splash-bar {
   height: 2px;
   width: 0%;
-  background: linear-gradient(90deg, #c9a84c, #e8c46a);
+  background: linear-gradient(90deg, #b8922e, #e8c46a, #c9a84c);
   border-radius: 1px;
   transition: width 0.4s ease;
-  box-shadow: 0 0 8px rgba(201,168,76,0.6);
+  box-shadow: 0 0 10px rgba(201,168,76,0.7);
+  position: relative; overflow: hidden;
+}
+#splash-bar::after {
+  content: '';
+  position: absolute; top: 0; left: -80%; width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+  animation: bar-shimmer 2.2s ease-in-out infinite;
+}
+@keyframes bar-shimmer {
+  0%   { left: -80%; }
+  100% { left: 120%; }
 }
 
-/* Status text */
+/* Status text — crossfade on change */
 #splash-status {
   margin-top: 10px;
   font-family: 'DM Mono', monospace;
   font-size: 8px;
-  color: rgba(201,168,76,0.35);
+  color: rgba(201,168,76,0.4);
   letter-spacing: 2px;
   text-transform: uppercase;
   min-height: 12px;
-  transition: opacity 0.3s;
+  transition: opacity 0.18s ease;
 }
+#splash-status.fading { opacity: 0; }
 
-/* Ship name footer */
+/* Ship name — fade up on load */
 #splash-ship {
   position: absolute;
   bottom: max(env(safe-area-inset-bottom, 0px) + 20px, 24px);
   font-family: 'DM Mono', monospace;
   font-size: 7.5px;
-  color: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.14);
   letter-spacing: 3px;
   text-transform: uppercase;
+  animation: ship-fadein 1.6s cubic-bezier(0.4,0,0.2,1) 0.6s both;
+}
+@keyframes ship-fadein {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 /* ── END SPLASH ─────────────────────────────────────────────── */
 
@@ -2760,7 +2806,9 @@ body.fs-mode #fs-hud { animation: hud-in 0.35s cubic-bezier(.2,.8,.3,1) both; }
 <!-- SPLASH SCREEN                                               -->
 <!-- ═══════════════════════════════════════════════════════════ -->
 <div id="splash">
+  <div id="splash-stars"></div>
   <div id="splash-glow"></div>
+  <div id="splash-glow2"></div>
   <video id="splash-img" autoplay muted playsinline></video>
   <div id="splash-bar-wrap">
     <div id="splash-bar"></div>
@@ -3514,30 +3562,72 @@ const _splash = (function() {
   let _statIdx = 0;
   let _tick = null;
 
-  // Calming startup melody — gentle ascending arpeggio using Web Audio API
+  // Generate star field — random box-shadow points, set once, GPU-animated via CSS
+  (function() {
+    const el = document.getElementById('splash-stars');
+    if (!el) return;
+    const W = window.innerWidth, H = window.innerHeight;
+    const shadows = [];
+    for (let i = 0; i < 70; i++) {
+      const x = Math.round(Math.random() * W);
+      const y = Math.round(Math.random() * H);
+      const r = Math.random() < 0.25 ? 1.5 : 1;
+      const a = (0.15 + Math.random() * 0.45).toFixed(2);
+      shadows.push(x + 'px ' + y + 'px 0 ' + r + 'px rgba(220,195,130,' + a + ')');
+    }
+    el.style.boxShadow = shadows.join(',');
+    el.style.width = '1px'; el.style.height = '1px';
+    el.style.borderRadius = '50%';
+  })();
+
+  // Enhanced startup melody — arpeggio + warm drone pad + harmony layer + echo
   function _playMelody() {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      // Soft pentatonic ascent: G4 B4 D5 G5 B5
-      const notes  = [392, 494, 587, 784, 988];
-      const t0     = ctx.currentTime + 0.05;
-      notes.forEach(function(freq, i) {
-        const osc  = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        const t = t0 + i * 0.38;
-        gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(0.06, t + 0.22);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
-        osc.start(t);
-        osc.stop(t + 2.1);
+      const t0  = ctx.currentTime + 0.08;
+
+      // Shared low-pass filter for warmth
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass'; filter.frequency.value = 3200; filter.Q.value = 0.4;
+      filter.connect(ctx.destination);
+
+      function voice(freq, startT, vol, dur, type) {
+        const osc = ctx.createOscillator(), g = ctx.createGain();
+        osc.connect(g); g.connect(filter);
+        osc.type = type || 'sine'; osc.frequency.value = freq;
+        g.gain.setValueAtTime(0, startT);
+        g.gain.linearRampToValueAtTime(vol, startT + 0.2);
+        g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
+        osc.start(startT); osc.stop(startT + dur + 0.05);
+      }
+
+      // Warm bass drone: G2 (98 Hz)
+      voice(98, t0, 0.032, 3.8);
+
+      // Pentatonic arpeggio: G4 B4 D5 G5 B5
+      const melody = [392, 494, 587, 784, 988];
+      melody.forEach(function(f, i) {
+        const t = t0 + i * 0.40;
+        voice(f, t, 0.062, 2.2);          // main note
+        voice(f, t + 0.30, 0.022, 1.8);   // soft echo
       });
+
+      // Gentle harmony a third above: B4 D#5 F#5 B5 D#6
+      const harmony = [494, 622, 740, 988, 1245];
+      harmony.forEach(function(f, i) {
+        voice(f, t0 + i * 0.40 + 0.12, 0.024, 1.9);
+      });
+
     } catch(e) {}
+  }
+
+  // Crossfade status text smoothly
+  function _setStatus(msg) {
+    if (!_stat) return;
+    _stat.classList.add('fading');
+    setTimeout(function() { _stat.textContent = msg; _stat.classList.remove('fading'); }, 180);
   }
 
   // Begin loading bar ticks and play melody — called once the video is ready
@@ -3551,11 +3641,11 @@ const _splash = (function() {
         _barPct = Math.min(85, _barPct + (85 - _barPct) * 0.07 + 0.3);
         if (_bar) _bar.style.width = _barPct.toFixed(1) + '%';
       }
-      // Cycle status messages
+      // Cycle status messages with crossfade
       _statIdx++;
-      if (_statIdx % 4 === 0 && _stat) {
+      if (_statIdx % 4 === 0) {
         const msgIdx = Math.floor(_statIdx / 4) % _statMessages.length;
-        _stat.textContent = _statMessages[msgIdx];
+        _setStatus(_statMessages[msgIdx]);
       }
     }, 280);
   }
