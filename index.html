@@ -14210,7 +14210,7 @@ function _savePrevServiceReservations() {
   const groups = [];
   for (const gid in state.softBlocks) {
     const g = state.softBlocks[gid];
-    if (!g || g.status !== 'active') continue;
+    if (!g || (g.status !== 'active' && g.status !== 'triggered')) continue;
     if (!Array.isArray(g.tableIds) || g.tableIds.length === 0) continue;
     groups.push({
       tableIds:  g.tableIds.slice(),
