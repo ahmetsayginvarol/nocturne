@@ -13971,11 +13971,13 @@ function _softBlockWarningTick() {
     if (!g || g.status !== 'active') continue;
     if (!Array.isArray(g.tableIds)) continue;
 
-    // Only ONE device drives notifications + broadcast + blocking for a group,
-    // so nothing fires once per connected tablet. The creator owns it; if no
-    // creator is recorded, any device may act (legacy fallback).
-    const isOwner = (g.createdBy && g.createdBy === DEVICE_ID) || (!g.createdBy);
-    if (!isOwner) continue;
+    // isOwner: only the creating device sends toasts/broadcasts/modals so they
+    // don't fire on every tablet. However the hard-block write (10-min) runs on
+    // ANY active device — this ensures tables are blocked even if the creator's
+    // tablet is offline. Dedup is handled by resetDone flags in Firebase (the
+    // soft-blocks listener keeps state.softBlocks current, so notReady reaches 0
+    // on all devices the moment the first device writes resetDone).
+    const isOwner = !g.createdBy || g.createdBy === DEVICE_ID;
 
     const minsUntil = Math.round((g.targetTime - Date.now()) / 60000);
     const notReady  = g.tableIds.filter(t => !(g.resetDone && g.resetDone[t])).length;
@@ -13988,26 +13990,34 @@ function _softBlockWarningTick() {
 
     // ── 20-MIN OVERDUE: prompt creator to cancel and release tables ──
     if (minsUntil <= -20) {
-      const key20 = gid + ':20cancel';
-      if (!_holdWarningsFired.has(key20)) {
-        _holdWarningsFired.add(key20);
-        _showHoldOverdueCancelModal(g);
-        _playHoldChime();
+      if (isOwner) {
+        const key20 = gid + ':20cancel';
+        if (!_holdWarningsFired.has(key20)) {
+          _holdWarningsFired.add(key20);
+          _showHoldOverdueCancelModal(g);
+          _playHoldChime();
+        }
       }
     }
 
     // ── OVERDUE (fires once when first crossing 0) ──
     if (minsUntil <= 0) {
-      const key = gid + ':overdue';
-      if (!_holdWarningsFired.has(key)) {
-        _holdWarningsFired.add(key);
-        _showHoldOverdueModal(g, notReady);
-        _playHoldChime();
+      if (isOwner) {
+        const key = gid + ':overdue';
+        if (!_holdWarningsFired.has(key)) {
+          _holdWarningsFired.add(key);
+          _showHoldOverdueModal(g, notReady);
+          _playHoldChime();
+        }
       }
       continue;
     }
 
-    // ── 10-MIN AUTO HARD-BLOCK (fires once when crossing <= 10) ──
+    // ── 10-MIN AUTO HARD-BLOCK ──
+    // Any active device may execute the block write so it fires even if the
+    // creating tablet is offline. resetDone flags (synced via Firebase) prevent
+    // duplicate writes — the first device to set them wins; all others will
+    // see notReady == 0 on their next tick and skip gracefully.
     if (minsUntil <= 10) {
       const key = gid + ':10block';
       if (!_holdWarningsFired.has(key)) {
@@ -14039,13 +14049,15 @@ function _softBlockWarningTick() {
           _tableOp(ops);
           renderAll();
 
-          const tStr10  = _fmtHoldTime(g.targetTime);
-          const label10 = g.note || 'reservation';
-          const msg10 = '🔒 Auto-blocked ' + availIds.length + ' table(s) — ' + label10 + ' at ' + tStr10 + ' (10 min)';
-          _showHoldToast(msg10, false);
-          _broadcastRaw(msg10, 'AUTO BLOCK');
+          if (isOwner) {
+            const tStr10  = _fmtHoldTime(g.targetTime);
+            const label10 = g.note || 'reservation';
+            const msg10 = '🔒 Auto-blocked ' + availIds.length + ' table(s) — ' + label10 + ' at ' + tStr10 + ' (10 min)';
+            _showHoldToast(msg10, false);
+            _broadcastRaw(msg10, 'AUTO BLOCK');
+          }
         }
-        if (occIds.length > 0) _showHoldOccupiedModal(occIds, g);
+        if (occIds.length > 0 && isOwner) _showHoldOccupiedModal(occIds, g);
         _playHoldChime();
       }
       continue;
@@ -14055,7 +14067,7 @@ function _softBlockWarningTick() {
     // At 45 min we SOFT-BLOCK (visual warning only) — tables stay tappable
     // so the reservation can be seated from the map. Hard-blocking still
     // happens at the 10-min threshold as before.
-    if (minsUntil <= 45) {
+    if (minsUntil <= 45 && isOwner) {
       const key = gid + ':45min';
       if (!_holdWarningsFired.has(key)) {
         _holdWarningsFired.add(key);
@@ -14222,7 +14234,7 @@ function _prevReservationCheck() {
   if (_prevResPromptShown) return;
   const now  = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
-  if (mins < 17 * 60 || mins >= 17 * 60 + 15) return;
+  if (mins < 16 * 60 + 45 || mins >= 17 * 60 + 10) return;  // 4:45 PM – 5:10 PM
 
   const todayKey = getDayKey(now);
   if (localStorage.getItem('eclipse_prev_res_check') === todayKey) {
