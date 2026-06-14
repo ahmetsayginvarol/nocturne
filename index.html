@@ -3568,6 +3568,8 @@ const _splash = (function() {
   let _tick = null;
 
   // Generate star field — random box-shadow points, set once, GPU-animated via CSS
+  // Store the shadow string so we can clone the stars after the splash disappears
+  let _starShadow = '';
   (function() {
     const el = document.getElementById('splash-stars');
     if (!el) return;
@@ -3580,46 +3582,70 @@ const _splash = (function() {
       const a = (0.15 + Math.random() * 0.45).toFixed(2);
       shadows.push(x + 'px ' + y + 'px 0 ' + r + 'px rgba(220,195,130,' + a + ')');
     }
-    el.style.boxShadow = shadows.join(',');
+    _starShadow = shadows.join(',');
+    el.style.boxShadow = _starShadow;
     el.style.width = '1px'; el.style.height = '1px';
     el.style.borderRadius = '50%';
   })();
 
-  // Clean startup melody — single pentatonic arpeggio, micro-chorus for warmth
+  // AudioContext shared instance — created early, resumed on first gesture
+  let _audioCtx = null;
+  function _getCtx() {
+    if (!_audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      _audioCtx = new AC();
+    }
+    return _audioCtx;
+  }
+  // Prime the AudioContext on the very first user gesture so melody plays immediately
+  function _primeAudio() {
+    const ctx = _getCtx();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    document.removeEventListener('touchstart', _primeAudio, true);
+    document.removeEventListener('mousedown',  _primeAudio, true);
+    document.removeEventListener('keydown',    _primeAudio, true);
+  }
+  document.addEventListener('touchstart', _primeAudio, { capture: true, once: true });
+  document.addEventListener('mousedown',  _primeAudio, { capture: true, once: true });
+  document.addEventListener('keydown',    _primeAudio, { capture: true, once: true });
+
+  // Clean pentatonic startup melody — 5 pure tones, slow spacing, long decay
   function _playMelody() {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const t0  = ctx.currentTime + 0.08;
-
-      // Gentle low-pass for natural warmth, no harshness
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass'; filter.frequency.value = 2800; filter.Q.value = 0.3;
-      filter.connect(ctx.destination);
-
-      // Pentatonic ascent: G4 B4 D5 G5 B5
-      [392, 494, 587, 784, 988].forEach(function(freq, i) {
-        const t = t0 + i * 0.42;
-
-        // Main sine voice
-        const osc = ctx.createOscillator(), g = ctx.createGain();
-        osc.connect(g); g.connect(filter);
-        osc.type = 'sine'; osc.frequency.value = freq;
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(0.07, t + 0.18);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
-        osc.start(t); osc.stop(t + 2.5);
-
-        // Micro-detuned double (+4 cents) for natural warmth — very quiet
-        const osc2 = ctx.createOscillator(), g2 = ctx.createGain();
-        osc2.connect(g2); g2.connect(filter);
-        osc2.type = 'sine'; osc2.frequency.value = freq * 1.0023;
-        g2.gain.setValueAtTime(0, t);
-        g2.gain.linearRampToValueAtTime(0.018, t + 0.22);
-        g2.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
-        osc2.start(t); osc2.stop(t + 2.3);
-      });
+      const ctx = _getCtx();
+      if (!ctx) return;
+      function _schedule() {
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass'; filter.frequency.value = 2600; filter.Q.value = 0.2;
+        filter.connect(ctx.destination);
+        // G4  B4   D5   G5   B5
+        [392, 494, 587, 784, 988].forEach(function(freq, i) {
+          const t = ctx.currentTime + 0.1 + i * 0.46;
+          const osc = ctx.createOscillator(), g = ctx.createGain();
+          osc.connect(g); g.connect(filter);
+          osc.type = 'sine'; osc.frequency.value = freq;
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.065, t + 0.28);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 2.8);
+          osc.start(t); osc.stop(t + 3.0);
+        });
+      }
+      if (ctx.state === 'running') {
+        _schedule();
+      } else {
+        ctx.resume().then(_schedule).catch(function() {
+          // Will play when user first taps — _primeAudio calls resume
+          // then we rely on the tap handler below
+          function _onGesture() {
+            ctx.resume().then(_schedule);
+            document.removeEventListener('touchstart', _onGesture, true);
+            document.removeEventListener('mousedown',  _onGesture, true);
+          }
+          document.addEventListener('touchstart', _onGesture, { capture: true, once: true });
+          document.addEventListener('mousedown',  _onGesture, { capture: true, once: true });
+        });
+      }
     } catch(e) {}
   }
 
@@ -3700,6 +3726,19 @@ const _splash = (function() {
       const el = document.getElementById('splash');
       if (el) {
         el.classList.add('hidden');
+
+        // Stars persist through dot wave then fade slowly
+        if (_starShadow) {
+          const sc = document.createElement('div');
+          sc.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border-radius:50%;pointer-events:none;z-index:9998;will-change:opacity;animation:stars-breathe 4s ease-in-out infinite alternate;transition:opacity 1.8s ease;';
+          sc.style.boxShadow = _starShadow;
+          document.body.appendChild(sc);
+          const DOT_TOTAL = 380 + 650 + 450;
+          setTimeout(function() {
+            sc.style.opacity = '0';
+            setTimeout(function() { if (sc.parentNode) sc.parentNode.removeChild(sc); }, 1900);
+          }, DOT_TOTAL + 200);
+        }
 
         _introAnimating = true;
         // DOT_DUR must match the tm-intro CSS animation duration (450ms)
