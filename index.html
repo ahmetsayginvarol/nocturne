@@ -158,6 +158,48 @@
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+/* ── Map spotlight sweep ── */
+/* Fixed overlay — stays clear of map-container's JS-controlled transform.
+   Orbit trick: rotate pivot → translateX radius → counter-rotate beam. */
+#map-spotlight-pivot {
+  position: fixed;
+  top: 50vh; left: 50vw;
+  width: 0; height: 0;
+  pointer-events: none;
+  z-index: 490;
+  opacity: 0;
+}
+#map-spotlight-pivot.sp-active {
+  animation: sp-orbit 1.6s cubic-bezier(0.45,0.05,0.55,0.95) forwards,
+             sp-life  1.6s ease forwards;
+}
+@keyframes sp-orbit {
+  from { transform: rotate(0deg)   translateX(38vmin); }
+  to   { transform: rotate(-360deg) translateX(38vmin); }
+}
+@keyframes sp-life {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  78%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+#map-spotlight-beam {
+  position: absolute;
+  width: 380px; height: 380px;
+  top: -190px; left: -190px;
+  border-radius: 50%;
+  /* counter-rotate so the beam stays upright as the pivot orbits */
+  animation: sp-counter 1.6s cubic-bezier(0.45,0.05,0.55,0.95) forwards;
+  background: radial-gradient(circle,
+    rgba(255,238,160,0.30) 0%,
+    rgba(201,168,76,0.12)  42%,
+    transparent 70%);
+  pointer-events: none;
+}
+@keyframes sp-counter {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 /* ── END SPLASH ─────────────────────────────────────────────── */
 
 
@@ -2822,6 +2864,8 @@ body.fs-mode #fs-hud { animation: hud-in 0.35s cubic-bezier(.2,.8,.3,1) both; }
   <div id="splash-status">Connecting…</div>
   <div id="splash-ship">Sun Princess · Princess Cruises</div>
 </div>
+<!-- Spotlight sweep overlay — activated by dismiss(), lives outside map-container -->
+<div id="map-spotlight-pivot"><div id="map-spotlight-beam"></div></div>
 <!-- ═══════════════════════════════════════════════════════════ -->
 
 <!-- TOOLBAR -->
@@ -3743,6 +3787,14 @@ const _splash = (function() {
     if (_stat) { _stat.textContent = msg || 'Ready'; }
     // Brief pause at 100% so the bar completion is visible, then fade out
     setTimeout(function() {
+      // Fire spotlight sweep as the splash fades — it orbits the map during the bloom+dot wave
+      const pivot = document.getElementById('map-spotlight-pivot');
+      if (pivot) {
+        pivot.classList.add('sp-active');
+        // Remove after animation so it doesn't linger in the DOM as a stacking context
+        setTimeout(function() { pivot.classList.remove('sp-active'); pivot.style.opacity = '0'; }, 1700);
+      }
+
       const el = document.getElementById('splash');
       if (el) {
         el.classList.add('hidden');
