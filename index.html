@@ -1865,19 +1865,12 @@ body.tool-active * { cursor: crosshair !important; }
 }
 
 /* ── Map reveal on boot ── */
-/* Cinematic bloom: map rises from darkness with a subtle scale-down,
-   timed so it settles just as the dot hue sweep begins.
-   Only opacity + transform used — both GPU-composited, no paint cost. */
+/* Bloom from darkness — opacity + filter only. transform is intentionally
+   excluded: #map-container owns that property for zoom/pan (set by JS). */
 @keyframes map-reveal {
-  0%   { opacity: 0; transform: scale(1.045); filter: brightness(0.08) saturate(0); }
-  35%  { opacity: 0.5; filter: brightness(0.4) saturate(0.4); }
-  100% { opacity: 1; transform: scale(1);     filter: brightness(1)   saturate(1); }
-}
-@keyframes map-shimmer {
-  0%   { opacity: 0; }
-  20%  { opacity: 1; }
-  80%  { opacity: 1; }
-  100% { opacity: 0; }
+  0%   { opacity: 0;   filter: brightness(0.05) saturate(0);   }
+  40%  { opacity: 0.6; filter: brightness(0.45) saturate(0.5); }
+  100% { opacity: 1;   filter: brightness(1)    saturate(1);   }
 }
 #map-container {
   isolation: isolate;
