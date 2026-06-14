@@ -11075,7 +11075,7 @@ function _ctBuildEnvelopeDoc(guests) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: [PH, PW] });
   const LH = 22;   // line height for 18pt text
   const X  = 1.25 * 72;  // 90pt from left (0.5" + 0.75" shift)
-  const Y0 = 0.5 * 72;   // 36pt from top \u2014 stateroom baseline
+  const Y0 = 1.0 * 72;   // 72pt from top (0.5" + 0.5" shift)
 
   guests.forEach((g, idx) => {
     if (idx > 0) doc.addPage([PH, PW], 'landscape');
