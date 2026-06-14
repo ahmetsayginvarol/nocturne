@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nocturne · Eclipse Deck 7 — Service Analytics</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+:root {
+  --bg:    #04070e;
+  --panel: #090e19;
+  --card:  rgba(13,20,36,0.7);
+  --b1:    #172035;
+  --b2:    #253650;
+  --text:  #dde8f8;
+  --mid:   #7a9acc;
+  --dim:   #3d5472;
+  --gold:  #c9a84c;
+  --gold2: #e0c47a;
+  --gold3: #f5dfa0;
+  --teal:  #2dd4bf;
+  --s1:    #f4a261;
+  --s2:    #ef4444;
+  --s3:    #a855f7;
+  --green: #22c55e;
+  --blue:  #3b82f6;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'DM Mono', monospace; min-height:100vh;
+  background-image:
+    radial-gradient(ellipse 80% 40% at 50% -5%, rgba(201,168,76,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(45,212,191,0.04) 0%, transparent 50%);
+}
+
+.page { max-width:1160px; margin:0 auto; padding:0 22px 100px; }
+
+/* ── HERO ── */
+.hero { text-align:center; padding:50px 0 34px; }
+.hero-logo {
+  width:90px; height:90px; border-radius:50%; object-fit:cover;
+  border:2px solid rgba(201,168,76,0.28);
+  box-shadow:0 0 48px rgba(201,168,76,0.13),0 0 0 6px rgba(201,168,76,0.05);
+  display:block; margin:0 auto 18px;
+}
+.hero h1 {
+  font-family:'Cinzel',serif; font-weight:800;
+  font-size:clamp(20px,4vw,34px); letter-spacing:6px;
+  color:var(--gold); text-shadow:0 0 40px rgba(201,168,76,0.3);
+}
+.hero .sub {
+  font-size:10px; letter-spacing:3.5px; color:var(--dim);
+  text-transform:uppercase; margin-top:7px;
+}
+.rule { width:160px; height:1px; margin:18px auto 0;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent); }
+
+/* ── CONNECT ── */
+#connect {
+  background:linear-gradient(160deg,rgba(14,21,38,0.97),rgba(8,13,24,0.97));
+  border:1px solid var(--b2); border-radius:18px; padding:30px;
+  max-width:580px; margin:0 auto 36px;
+  box-shadow:0 24px 80px rgba(0,0,0,0.55),inset 0 1px 0 rgba(201,168,76,0.07);
+}
+#connect h2 { font-family:'Cinzel',serif; font-size:15px; color:var(--gold2); letter-spacing:2px; margin-bottom:7px; }
+#connect p  { font-size:11px; color:var(--mid); line-height:1.7; margin-bottom:20px; }
+.date-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+.date-field { flex:1; min-width:145px; }
+.date-field label { display:block; font-size:9px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; margin-bottom:5px; }
+.date-field input {
+  width:100%; background:rgba(4,7,14,0.85); border:1.5px solid var(--b2);
+  color:var(--text); padding:11px 13px; border-radius:10px;
+  font-family:'DM Mono',monospace; font-size:13px; outline:none; transition:border-color .15s;
+}
+.date-field input:focus { border-color:var(--gold); box-shadow:0 0 0 3px rgba(201,168,76,0.08); }
+
+.btn {
+  background:linear-gradient(135deg,var(--gold),#b8922e); color:#1a0a00;
+  border:none; padding:13px 22px; border-radius:10px; cursor:pointer;
+  font-family:'DM Mono',monospace; font-weight:500; font-size:12px;
+  letter-spacing:1.5px; text-transform:uppercase; transition:all .2s; width:100%;
+}
+.btn:hover { background:linear-gradient(135deg,var(--gold2),var(--gold)); transform:translateY(-1px); box-shadow:0 8px 24px rgba(201,168,76,0.22); }
+.btn:active { transform:translateY(0); }
+.btn.ghost {
+  background:transparent; border:1.5px solid var(--b2); color:var(--mid);
+  box-shadow:none; width:auto; padding:8px 15px; font-size:10px;
+}
+.btn.ghost:hover { border-color:var(--gold); color:var(--gold); transform:none; box-shadow:none; }
+#status-line { text-align:center; font-size:11px; color:var(--dim); margin-top:14px; min-height:16px; }
+.sdot { display:inline-block; width:6px; height:6px; border-radius:50%;
+  background:var(--gold); margin-right:6px; vertical-align:middle;
+  animation:sdot 1s ease-in-out infinite; }
+@keyframes sdot { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* ── REPORT ── */
+#report { display:none; }
+#report.show { display:block; }
+
+.rtop {
+  display:flex; justify-content:space-between; align-items:flex-end;
+  flex-wrap:wrap; gap:14px; padding:24px 0 18px;
+  border-bottom:1px solid var(--b1); margin-bottom:30px;
+}
+.rtop .period { font-family:'Cinzel',serif; font-size:clamp(15px,2.5vw,21px); color:var(--gold2); letter-spacing:1px; }
+.rtop .meta   { font-size:10px; color:var(--dim); margin-top:3px; }
+.ract { display:flex; gap:8px; flex-wrap:wrap; }
+
+/* ── SECTION ── */
+.sec { margin-bottom:38px; }
+.sec-title {
+  font-family:'Cinzel',serif; font-size:10.5px; letter-spacing:3px;
+  color:var(--gold); text-transform:uppercase; margin-bottom:16px;
+  display:flex; align-items:center; gap:10px;
+}
+.sec-title::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--b2),transparent); }
+
+/* ── HERO CARDS ── */
+.hgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(165px,1fr)); gap:13px; }
+.hcard {
+  background:linear-gradient(145deg,rgba(16,24,44,0.8),rgba(8,13,24,0.8));
+  border:1px solid var(--b2); border-radius:15px; padding:20px 17px;
+  position:relative; overflow:hidden; transition:transform .2s,box-shadow .2s;
+}
+.hcard:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(0,0,0,0.4); }
+.hcard::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(90deg,var(--accent,var(--gold)),transparent);
+}
+.hcard::after {
+  content:''; position:absolute; top:-28px; right:-28px;
+  width:90px; height:90px; border-radius:50%;
+  background:radial-gradient(circle,var(--accent,var(--gold)) 0%,transparent 70%);
+  opacity:.07; pointer-events:none;
+}
+.hc-v { font-family:'Cinzel',serif; font-size:clamp(26px,3.5vw,38px); font-weight:700; color:var(--accent,var(--gold2)); line-height:1; }
+.hc-l { font-size:9px; letter-spacing:1.5px; color:var(--mid); text-transform:uppercase; margin-top:7px; }
+.hc-s { font-size:10px; color:var(--dim); margin-top:4px; }
+
+/* ── PANELS ── */
+.panel {
+  background:linear-gradient(145deg,rgba(12,19,35,0.75),rgba(8,13,24,0.75));
+  border:1px solid var(--b1); border-radius:15px; padding:18px 20px;
+}
+.panel h3 {
+  font-size:9.5px; letter-spacing:2px; color:var(--gold2); text-transform:uppercase;
+  margin-bottom:14px; display:flex; align-items:center; gap:8px;
+}
+.panel h3::after { content:''; flex:1; height:1px; background:var(--b1); }
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media(max-width:740px){ .two-col{ grid-template-columns:1fr; } }
+
+/* ── BAR ROWS ── */
+.blist { display:flex; flex-direction:column; gap:10px; }
+.brow { display:grid; grid-template-columns:130px 1fr 70px; gap:11px; align-items:center; font-size:11px; }
+.br-l { color:var(--mid); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.btrack { height:22px; background:rgba(4,7,14,0.75); border-radius:5px; overflow:hidden; }
+.bfill  { height:100%; border-radius:5px; position:relative; transition:width 1s cubic-bezier(.2,.8,.3,1); min-width:2px; }
+.bfill::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(255,255,255,.09),transparent); }
+.br-v { text-align:right; font-weight:500; color:var(--text); }
+.br-p { font-size:9px; color:var(--dim); }
+
+/* ── TABLE ── */
+table.dt { width:100%; border-collapse:collapse; font-size:11px; }
+table.dt th { text-align:left; padding:7px 11px; font-size:8.5px; letter-spacing:1px; color:var(--dim); text-transform:uppercase; border-bottom:1px solid var(--b2); font-weight:400; }
+table.dt td { padding:9px 11px; border-bottom:1px solid rgba(23,32,53,.45); color:var(--text); vertical-align:middle; }
+table.dt td.r { text-align:right; font-variant-numeric:tabular-nums; }
+table.dt tr:last-child td { border-bottom:none; }
+table.dt tbody tr:hover td { background:rgba(201,168,76,.04); }
+
+/* ── BADGES ── */
+.badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:9px; letter-spacing:.5px; }
+.bg-gold   { background:rgba(201,168,76,.15); color:var(--gold2);  border:1px solid rgba(201,168,76,.2); }
+.bg-teal   { background:rgba(45,212,191,.12); color:var(--teal);   border:1px solid rgba(45,212,191,.2); }
+.bg-red    { background:rgba(239,68,68,.12);  color:#f87171;        border:1px solid rgba(239,68,68,.2); }
+.bg-green  { background:rgba(34,197,94,.12);  color:var(--green);   border:1px solid rgba(34,197,94,.2); }
+.bg-purple { background:rgba(168,85,247,.12); color:#c084fc;        border:1px solid rgba(168,85,247,.2); }
+
+/* ── TAG CLOUD ── */
+.tags { display:flex; flex-wrap:wrap; gap:6px; }
+.tag {
+  background:rgba(12,18,34,.85); border:1px solid var(--b2); border-radius:6px;
+  padding:4px 10px; font-size:10px; color:var(--mid); transition:all .15s;
+}
+.tag:hover { border-color:var(--gold); color:var(--gold2); }
+.tag-cnt { color:var(--gold); font-size:9px; margin-left:3px; }
+
+/* ── LEGEND ── */
+.legend { display:flex; flex-direction:column; gap:8px; }
+.leg-item { display:flex; align-items:center; gap:9px; font-size:11px; }
+.leg-sw { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+.leg-l { color:var(--mid); flex:1; }
+.leg-v { color:var(--text); font-variant-numeric:tabular-nums; }
+
+.empty { color:var(--dim); font-size:11px; padding:14px 0; text-align:center; }
+
+footer { text-align:center; margin-top:56px; padding-top:22px; border-top:1px solid var(--b1); font-size:10px; color:var(--dim); letter-spacing:1.5px; }
+footer strong { color:var(--mid); }
+
+@keyframes fadeup { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+.fu  { animation:fadeup .45s ease forwards; }
+.fu1 { animation-delay:.04s; opacity:0; }
+.fu2 { animation-delay:.09s; opacity:0; }
+
+@media print {
+  body { background:#fff; color:#111; }
+  #connect,.ract { display:none!important; }
+  .hcard,.panel  { break-inside:avoid; background:#f8f8f8; border-color:#ddd; }
+  .hc-v,.sec-title,.hero h1 { color:#1a0a00!important; text-shadow:none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <img src="logo.jpg" alt="Nocturne" class="hero-logo">
+  <h1>ECLIPSE · DECK 7</h1>
+  <div class="sub">Service Analytics &amp; Performance Report</div>
+  <div class="rule"></div>
+</header>
+
+<div id="connect">
+  <h2>Generate Report</h2>
+  <p>Pulls live and archived service data from the database for the selected date range and builds a presentation-ready analytics summary. Leave dates empty to include all available history.</p>
+  <div class="date-row">
+    <div class="date-field"><label>From (optional)</label><input type="date" id="date-from"></div>
+    <div class="date-field"><label>To (optional)</label><input type="date" id="date-to"></div>
+  </div>
+  <button class="btn" id="gen-btn" onclick="generate()">⬇&nbsp; IMPORT &amp; GENERATE REPORT</button>
+  <div id="status-line"></div>
+</div>
+
+<div id="report">
+  <div class="rtop fu">
+    <div>
+      <div class="period" id="rh-period">—</div>
+      <div class="meta"   id="rh-meta"></div>
+    </div>
+    <div class="ract">
+      <button class="btn ghost" onclick="window.print()">🖨 Print / PDF</button>
+      <button class="btn ghost" onclick="downloadCSV()">⬇ CSV</button>
+      <button class="btn ghost" onclick="resetView()">↺ New</button>
+    </div>
+  </div>
+  <div id="report-body"></div>
+</div>
+
+<footer>Eclipse Restaurant · Deck 7 · Sun Princess &nbsp;·&nbsp; Analytics by <strong>Ahmet Saygin VAROL</strong></footer>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey:"AIzaSyDNIpnIuJIF1guVUydbAmo_vV7OBNl3a28",
+  authDomain:"eclipse-floor.firebaseapp.com",
+  databaseURL:"https://eclipse-floor-default-rtdb.firebaseio.com",
+  projectId:"eclipse-floor",
+  storageBucket:"eclipse-floor.firebasestorage.app",
+  messagingSenderId:"726505687250",
+  appId:"1:726505687250:web:4a80333510fa6308ec450b"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+let _report = null;
+
+/* ── helpers ── */
+function setStatus(msg, spin) {
+  document.getElementById('status-line').innerHTML =
+    spin ? `<span class="sdot"></span>${msg}` : (msg || '');
+}
+function esc(s){ return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmt(n){ return (n||0).toLocaleString(); }
+function fmtMin(m){ if(!m)return'—'; const h=Math.floor(m/60),mn=m%60; return h?`${h}h ${mn}m`:`${mn}m`; }
+function fmtTime(ts){ return ts ? new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'; }
+function pct(v,t){ return t ? Math.round(v/t*100) : 0; }
+function inRange(dk,from,to){ return (!from||dk>=from)&&(!to||dk<=to); }
+
+/* ── generate ── */
+async function generate(){
+  const btn=document.getElementById('gen-btn');
+  btn.disabled=true;
+  setStatus('Connecting to database…',true);
+  const from=document.getElementById('date-from').value||null;
+  const to  =document.getElementById('date-to').value||null;
+  try {
+    setStatus('Loading service archive…',true);
+    const [aSnap,bcSnap,sbSnap,ctSnap,slSnap] = await Promise.all([
+      db.ref('eclipse/deck7/archive').once('value'),
+      db.ref('eclipse/deck7/broadcasts').once('value'),
+      db.ref('eclipse/deck7/softBlocks').once('value'),
+      db.ref('eclipse/deck7/chefsTable').once('value'),
+      db.ref('eclipse/deck7/sessionLog').once('value'),
+    ]);
+    setStatus('Crunching numbers…',true);
+    const data=analyze(
+      aSnap.val()||{}, bcSnap.val()||{},
+      sbSnap.val()||{}, ctSnap.val()||{},
+      slSnap.val()||{}, from, to
+    );
+    if(data.dayCount===0){ setStatus('No archived data found for that range.'); btn.disabled=false; return; }
+    _report=data;
+    renderReport(data,from,to);
+    document.getElementById('connect').style.display='none';
+    document.getElementById('report').classList.add('show');
+    window.scrollTo({top:0,behavior:'smooth'});
+  } catch(e){ console.error(e); setStatus('Error: '+(e.message||e)); }
+  btn.disabled=false;
+}
+
+/* ── analyze ── */
+function analyze(archive,broadcasts,softBlocks,chefsTable,sessionLog,from,to){
+  const days=Object.keys(archive).filter(k=>inRange(k,from,to)).sort();
+  let totalSeatings=0,totalResets=0,totalCovers=0;
+  const turnDist={1:0,2:0,3:0,4:0};
+  const byStaff={},byTable={};
+  let durSum=0,durCount=0,durMax=0;
+  const durations=[];
+  let sharingCount=0,combinedCount=0;
+  const perDay={},byHour={},srFreq={},turnCountsByTable={};
+  const eventLog=[];
+
+  days.forEach(dk=>{
+    const day=archive[dk]||{};
+    const seatings=day.seatings?Object.values(day.seatings):[];
+    const resets  =day.resets  ?Object.values(day.resets)  :[];
+    const events  =day.events  ?Object.values(day.events)  :[];
+    const summary =day.summary||null;
+    perDay[dk]={seatings:seatings.length,resets:resets.length,covers:0};
+    if(summary&&summary.turnCounts)
+      Object.entries(summary.turnCounts).forEach(([tid,cnt])=>{ turnCountsByTable[tid]=(turnCountsByTable[tid]||0)+cnt; });
+    seatings.forEach(s=>{
+      totalSeatings++;
+      const cov=s.covers||0; totalCovers+=cov; perDay[dk].covers+=cov;
+      const t=s.seating; if(t>=1&&t<=4) turnDist[t]++;
+      if(s.sharing) sharingCount++;
+      if(Array.isArray(s.combinedWith)&&s.combinedWith.length) combinedCount++;
+      const who=s.seatedBy||'Unknown';
+      if(!byStaff[who]) byStaff[who]={seatings:0,resets:0,covers:0};
+      byStaff[who].seatings++; byStaff[who].covers+=cov;
+      byTable[s.tableId||'?']=(byTable[s.tableId||'?']||0)+1;
+      const ts2=s.seatedAt||s.ts;
+      if(ts2){ const hr=new Date(ts2).getHours(); byHour[hr]=(byHour[hr]||0)+(cov||1); }
+      if(Array.isArray(s.staterooms)) s.staterooms.forEach(sr=>{ if(sr) srFreq[sr]=(srFreq[sr]||0)+1; });
+    });
+    resets.forEach(r=>{
+      totalResets++;
+      const who=r.resetBy||'Unknown';
+      if(!byStaff[who]) byStaff[who]={seatings:0,resets:0,covers:0};
+      byStaff[who].resets++;
+      if(typeof r.durationMin==='number'&&r.durationMin>0&&r.durationMin<600){
+        durSum+=r.durationMin; durCount++; durations.push(r.durationMin);
+        if(r.durationMin>durMax) durMax=r.durationMin;
+      }
+    });
+    events.slice(-80).forEach(e=>{ if(e&&e.ts&&e.action) eventLog.push({...e,dk}); });
+  });
+  eventLog.sort((a,b)=>b.ts-a.ts);
+
+  /* broadcasts */
+  let bcTotal=0; const bcByType={},bcBySender={};
+  Object.values(broadcasts||{}).forEach(b=>{
+    if(!b||!b.ts) return;
+    const dk=new Date(b.ts).toISOString().slice(0,10);
+    if(!inRange(dk,from,to)) return;
+    bcTotal++;
+    const tp=b.type||'message'; bcByType[tp]=(bcByType[tp]||0)+1;
+    const snd=b.sender||'Unknown'; bcBySender[snd]=(bcBySender[snd]||0)+1;
+  });
+  days.forEach(dk=>{
+    const bs=(archive[dk]||{}).broadcastStats; if(!bs) return;
+    bcTotal+=bs.total||0;
+    Object.entries(bs.byType||{}).forEach(([k,v])=>bcByType[k]=(bcByType[k]||0)+v);
+    Object.entries(bs.bySender||{}).forEach(([k,v])=>bcBySender[k]=(bcBySender[k]||0)+v);
+  });
+
+  /* soft blocks */
+  let holdsTotal=0,holdsTriggered=0,holdsTables=0; const holdsList=[];
+  Object.values(softBlocks||{}).forEach(g=>{
+    if(!g||!g.createdAt) return;
+    const dk=new Date(g.createdAt).toISOString().slice(0,10);
+    if(!inRange(dk,from,to)) return;
+    holdsTotal++;
+    if(g.status==='triggered') holdsTriggered++;
+    if(Array.isArray(g.tableIds)) holdsTables+=g.tableIds.length;
+    holdsList.push({ tables:(g.tableIds||[]).join(', '), note:g.note||'', status:g.status||'active',
+      time:g.targetTime?fmtTime(g.targetTime):'—', date:dk });
+  });
+  holdsList.sort((a,b)=>a.date<b.date?1:-1);
+
+  /* chef's table */
+  const ctList=[];
+  Object.values(chefsTable||{}).forEach(ev=>{
+    if(!ev||!ev.date||!inRange(ev.date,from,to)) return;
+    ctList.push({ date:ev.date, status:ev.status||'draft', seatCount:ev.seatCount||0,
+      notes:ev.notes||'', guestCount:ev.guests?Object.keys(ev.guests).length:0 });
+  });
+  ctList.sort((a,b)=>a.date<b.date?1:-1);
+
+  /* session log */
+  const sessionByAction={},sessionByStaff={};
+  Object.values(sessionLog||{}).forEach(entry=>{
+    if(!entry||!entry.ts) return;
+    const dk=new Date(entry.ts).toISOString().slice(0,10);
+    if(!inRange(dk,from,to)) return;
+    const a=entry.action||'unknown'; sessionByAction[a]=(sessionByAction[a]||0)+1;
+    const w=entry.name||'Unknown';   sessionByStaff[w]=(sessionByStaff[w]||0)+1;
+  });
+
+  /* stats */
+  durations.sort((a,b)=>a-b);
+  const median=durations.length
+    ?(durations.length%2?durations[(durations.length-1)/2]
+      :Math.round((durations[durations.length/2-1]+durations[durations.length/2])/2)):0;
+  const durBuckets={'<60':0,'60–90':0,'90–120':0,'120+':0};
+  durations.forEach(d=>{ if(d<60)durBuckets['<60']++; else if(d<90)durBuckets['60–90']++; else if(d<120)durBuckets['90–120']++; else durBuckets['120+']++; });
+  const pctUnder90=durations.length?Math.round((durBuckets['<60']+durBuckets['60–90'])/durations.length*100):0;
+  const avgDur=durCount?Math.round(durSum/durCount):0;
+  const avgPartySize=totalSeatings?totalCovers/totalSeatings:0;
+  const dayCount=days.length;
+  let busiestDay=null,busiestCovers=0;
+  Object.entries(perDay).forEach(([d,v])=>{ if(v.covers>busiestCovers){busiestCovers=v.covers;busiestDay=d;} });
+  const seatCoverList=Object.values(byStaff).map(s=>s.covers).filter(c=>c>0);
+  const activeCrew=seatCoverList.length;
+  const meanC=activeCrew?seatCoverList.reduce((a,b)=>a+b,0)/activeCrew:0;
+  let gini=0;
+  if(activeCrew>1&&meanC>0){
+    let sd=0;
+    for(let i=0;i<seatCoverList.length;i++) for(let j=0;j<seatCoverList.length;j++) sd+=Math.abs(seatCoverList[i]-seatCoverList[j]);
+    gini=sd/(2*seatCoverList.length**2*meanC);
+  }
+  const balanceScore=Math.round((1-gini)*100);
+  const topSR=Object.entries(srFreq).sort((a,b)=>b[1]-a[1]).slice(0,40);
+
+  return {
+    days,dayCount,totalSeatings,totalResets,totalCovers,turnDist,byStaff,byTable,
+    avgDur,durMax,durCount,avgPartySize,sharingCount,combinedCount,perDay,byHour,
+    avgCoversPerDay:dayCount?Math.round(totalCovers/dayCount):0,
+    avgSeatingsPerDay:dayCount?Math.round(totalSeatings/dayCount):0,
+    busiestDay,busiestCovers,
+    bcTotal,bcByType,bcBySender,
+    holdsTotal,holdsTriggered,holdsTables,holdsList,
+    ctList,sessionByAction,sessionByStaff,
+    turnoverRate:totalSeatings/178,
+    median,durBuckets,pctUnder90,activeCrew,balanceScore,
+    topSR,uniqueSR:Object.keys(srFreq).length,
+    eventLog,turnCountsByTable,
+  };
+}
+
+/* ── render ── */
+function renderReport(d,from,to){
+  const period=(from||to)?((from||'start')+' → '+(to||'today')):'All Recorded Service';
+  document.getElementById('rh-period').textContent=period;
+  document.getElementById('rh-meta').textContent=
+    d.dayCount+' service day'+(d.dayCount!==1?'s':'')+
+    ' · generated '+new Date().toLocaleString([],{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  let h='';
+
+  /* 1 – HEADLINE */
+  h+=sec('Headline Figures',`
+    <div class="hgrid fu fu1">
+      ${hc(fmt(d.totalCovers),       'Total Covers Served',    d.avgCoversPerDay+' avg / service day', 'var(--gold2)')}
+      ${hc(fmt(d.totalSeatings),     'Tables Seated',          d.avgSeatingsPerDay+' avg / day',       'var(--s1)')}
+      ${hc(fmt(d.totalResets),       'Tables Turned',          'fully reset &amp; cleared',             'var(--teal)')}
+      ${hc(d.avgPartySize.toFixed(1),'Avg Party Size',         'covers per seating event',             'var(--s3)')}
+      ${hc(fmtMin(d.avgDur),         'Avg Dining Duration',    'seat → reset · max '+fmtMin(d.durMax),'var(--s2)')}
+      ${hc(fmt(d.bcTotal),           'Broadcasts Sent',        'team coordination messages',           'var(--gold)')}
+    </div>`);
+
+  /* 2 – INTENSITY */
+  h+=sec('Service Intensity',`
+    <div class="hgrid fu fu2">
+      ${hc(fmt(d.avgCoversPerDay),          'Avg Covers / Day',      '', 'var(--gold2)')}
+      ${hc(d.busiestDay?fmt(d.busiestCovers):'—','Busiest Day',d.busiestDay||'','var(--s1)')}
+      ${hc(d.turnoverRate.toFixed(1)+'×',   'Turnover Rate',         'seatings per table (178 total)',    'var(--teal)')}
+      ${hc(fmt(d.combinedCount),            'Combined Seatings',     'multi-table arrangements',          'var(--s3)')}
+      ${hc(fmt(d.sharingCount),             'Shared-Table Seatings', 'parties sharing a table',           'var(--gold)')}
+      ${hc(fmt(d.uniqueSR),                 'Unique Staterooms',     'distinct cabin numbers seen',       'var(--blue)')}
+    </div>`);
+
+  /* 3 – TURN DIST */
+  const turnTotal=Object.values(d.turnDist).reduce((a,b)=>a+b,0)||1;
+  const tColors=['var(--s1)','var(--s2)','var(--s3)','var(--gold)'];
+  const tNames=['1st Turn','2nd Turn','3rd Turn','4th Turn'];
+  h+=sec('Turn Distribution',`
+    <div class="two-col">
+      <div class="panel"><h3>Seatings by Turn</h3><div class="blist">
+        ${[1,2,3,4].map((t,i)=>br(tNames[i],d.turnDist[t]||0,turnTotal,tColors[i],true)).join('')}
+      </div></div>
+      <div class="panel"><h3>Turn Mix</h3><div class="legend" style="margin-top:6px">
+        ${[1,2,3,4].map((t,i)=>`
+          <div class="leg-item">
+            <div class="leg-sw" style="background:${tColors[i]}"></div>
+            <span class="leg-l">${tNames[i]}</span>
+            <span class="leg-v">${fmt(d.turnDist[t]||0)}</span>
+            <span class="br-p" style="margin-left:6px">${pct(d.turnDist[t]||0,turnTotal)}%</span>
+          </div>`).join('')}
+      </div>
+      <div style="margin-top:16px;font-size:10px;color:var(--dim)">
+        Median dining time: <span style="color:var(--gold2)">${fmtMin(d.median)}</span>
+        &nbsp;·&nbsp; ${d.pctUnder90}% turned under 90 min
+      </div></div>
+    </div>`);
+
+  /* 4 – TURN-TIME */
+  const dbk=d.durBuckets||{};
+  const dbT=Object.values(dbk).reduce((a,b)=>a+b,0)||1;
+  h+=sec('Turn-Time Consistency',`
+    <div class="hgrid" style="margin-bottom:14px">
+      ${hc(fmtMin(d.median),   'Median Dining Time', 'half of tables are faster',                 'var(--gold2)')}
+      ${hc(d.pctUnder90+'%',   'Under 90 Min',       'within service target window',              'var(--teal)')}
+      ${hc(fmtMin(d.avgDur),   'Mean Dining Time',   'over '+fmt(d.durCount)+' recorded turns',  'var(--s1)')}
+      ${hc(fmtMin(d.durMax),   'Longest Seating',    'single table max duration',                 'var(--s2)')}
+    </div>
+    <div class="panel"><h3>Dining-Duration Distribution</h3><div class="blist">
+      ${br('Under 60 min',  dbk['<60']||0,   dbT,'var(--teal)', true)}
+      ${br('60 – 90 min',   dbk['60–90']||0, dbT,'var(--green)',true)}
+      ${br('90 – 120 min',  dbk['90–120']||0,dbT,'var(--s1)',   true)}
+      ${br('Over 120 min',  dbk['120+']||0,  dbT,'var(--s2)',   true)}
+    </div></div>`);
+
+  /* 5 – STAFF */
+  const staffRows=Object.entries(d.byStaff).sort((a,b)=>b[1].covers-a[1].covers).slice(0,15);
+  const staffMax=staffRows.length?staffRows[0][1].covers:1;
+  const bsCol=d.balanceScore>=70?'var(--green)':d.balanceScore>=45?'var(--s1)':'var(--s2)';
+  h+=sec('Floor Load Balance &amp; Staff',`
+    <div class="hgrid" style="margin-bottom:14px">
+      ${hc(d.balanceScore+'%', 'Balance Score',    '100% = perfectly even workload',     bsCol)}
+      ${hc(fmt(d.activeCrew),  'Active Crew',      'staff who seated tables',            'var(--teal)')}
+      ${hc(d.activeCrew?fmt(Math.round(d.totalCovers/d.activeCrew)):'—','Avg Covers / Crew','mean workload per active server','var(--gold2)')}
+    </div>
+    <div class="panel"><h3>Staff Leaderboard — Covers Seated</h3>
+    ${staffRows.length?`<div class="blist">
+      ${staffRows.map(([name,s])=>`
+        <div class="brow" style="grid-template-columns:130px 1fr 160px">
+          <div class="br-l">${esc(name)}</div>
+          <div class="btrack"><div class="bfill" style="width:${pct(s.covers,staffMax)}%;background:var(--gold)"></div></div>
+          <div style="text-align:right;font-size:10px">
+            <span style="color:var(--gold2)">${fmt(s.covers)}</span>
+            <span style="color:var(--dim)"> cvr · ${fmt(s.seatings)} seated · ${fmt(s.resets)} reset</span>
+          </div>
+        </div>`).join('')}
+    </div>`:'<div class="empty">No staff data available.</div>'}
+    </div>`);
+
+  /* 6 – STATEROOMS */
+  if(d.topSR.length){
+    const maxSR=d.topSR[0][1];
+    const repeatSR=d.topSR.filter(([,c])=>c>1);
+    h+=sec('Stateroom Insights',`
+      <div class="hgrid" style="margin-bottom:14px">
+        ${hc(fmt(d.uniqueSR),        'Unique Staterooms', 'distinct cabins served',               'var(--gold2)')}
+        ${hc(fmt(repeatSR.length),   'Repeat Diners',     'staterooms visited more than once',    'var(--teal)')}
+        ${hc(d.topSR[0]?.[0]||'—',  'Most Frequent Cabin',`visited ${d.topSR[0]?.[1]||0} times`,'var(--s3)')}
+      </div>
+      <div class="two-col">
+        <div class="panel"><h3>Top 15 Staterooms</h3><div class="blist">
+          ${d.topSR.slice(0,15).map(([sr,cnt])=>br('Cabin '+sr,cnt,maxSR,cnt>1?'var(--gold)':'var(--b2)',false)).join('')}
+        </div></div>
+        ${repeatSR.length?`<div class="panel"><h3>Repeat Visitor Cabins (2+ visits)</h3>
+          <div class="tags">
+            ${repeatSR.map(([sr,c])=>`<div class="tag">${esc(sr)}<span class="tag-cnt">×${c}</span></div>`).join('')}
+          </div></div>`:'<div></div>'}
+      </div>`);
+  }
+
+  /* 7 – PEAK HOURS */
+  const hourE=Object.entries(d.byHour).map(([h2,v])=>[parseInt(h2,10),v]).sort((a,b)=>a[0]-b[0]);
+  if(hourE.length){
+    const hMax=Math.max(...hourE.map(e=>e[1]));
+    const peak=hourE.reduce((a,b)=>b[1]>a[1]?b:a,[0,0]);
+    const peakLbl=(peak[0]%12||12)+(peak[0]>=12?'pm':'am');
+    h+=sec('Peak Service Hours',`
+      <div class="hgrid" style="margin-bottom:14px">
+        ${hc(peakLbl,'Peak Hour',fmt(peak[1])+' covers seated','var(--s1)')}
+        ${hc(hourE.length+'','Active Hours','hours with cover data','var(--teal)')}
+      </div>
+      <div class="panel"><h3>Covers Seated by Hour</h3><div class="blist">
+        ${hourE.map(([hr,v])=>br((hr%12||12)+(hr>=12?'pm':'am'),v,hMax,'var(--s1)',true)).join('')}
+      </div></div>`);
+  }
+
+  /* 8 – HOLDS */
+  if(d.holdsTotal>0){
+    h+=sec('Reservation Holds',`
+      <div class="hgrid" style="margin-bottom:14px">
+        ${hc(fmt(d.holdsTotal),     'Hold Groups Created', '',                    'var(--gold2)')}
+        ${hc(fmt(d.holdsTriggered), 'Fulfilled',           'reservations honoured','var(--green)')}
+        ${hc(fmt(d.holdsTables),    'Tables Reserved',     'across all hold groups','var(--teal)')}
+        ${hc(pct(d.holdsTriggered,d.holdsTotal)+'%','Fulfillment Rate','holds that were activated','var(--s1)')}
+      </div>
+      ${d.holdsList.length?`<div class="panel"><h3>Hold Groups Log</h3>
+        <table class="dt"><thead><tr><th>Date</th><th>Time</th><th>Tables</th><th>Note / Name</th><th>Status</th></tr></thead>
+        <tbody>${d.holdsList.slice(0,30).map(h2=>`<tr>
+          <td style="color:var(--dim)">${esc(h2.date)}</td>
+          <td>${esc(h2.time)}</td>
+          <td style="color:var(--gold2)">${esc(h2.tables)}</td>
+          <td>${h2.note?esc(h2.note):'<span style="color:var(--dim)">—</span>'}</td>
+          <td>${sbadge(h2.status)}</td>
+        </tr>`).join('')}</tbody></table></div>`:''}
+    `);
+  }
+
+  /* 9 – CHEF'S TABLE */
+  if(d.ctList.length){
+    h+=sec("Chef's Table Events",`
+      <div class="hgrid" style="margin-bottom:14px">
+        ${hc(fmt(d.ctList.length),'Events Planned','','var(--gold2)')}
+        ${hc(fmt(d.ctList.filter(e=>e.status==='confirmed').length),'Confirmed','','var(--green)')}
+        ${hc(fmt(d.ctList.reduce((a,e)=>a+(e.guestCount||0),0)),'Total Guests','across all events','var(--teal)')}
+      </div>
+      <div class="panel"><h3>Event Log</h3>
+        <table class="dt"><thead><tr><th>Date</th><th>Status</th><th>Seats</th><th>Guests</th><th>Notes</th></tr></thead>
+        <tbody>${d.ctList.map(ev=>`<tr>
+          <td>${esc(ev.date)}</td>
+          <td>${sbadge(ev.status)}</td>
+          <td class="r" style="color:var(--gold2)">${fmt(ev.seatCount)}</td>
+          <td class="r">${fmt(ev.guestCount)}</td>
+          <td style="color:var(--dim);font-size:10px">${ev.notes?esc(ev.notes.slice(0,60))+(ev.notes.length>60?'…':''):'—'}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>`);
+  }
+
+  /* 10 – BROADCASTS */
+  const bcTypes=Object.entries(d.bcByType).sort((a,b)=>b[1]-a[1]);
+  const bcSenders=Object.entries(d.bcBySender).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  h+=sec('Team Communications',`
+    <div class="two-col">
+      <div class="panel"><h3>By Type</h3>
+        ${bcTypes.length?`<div class="blist">${(()=>{const mx=Math.max(...bcTypes.map(t=>t[1]));
+          return bcTypes.map(([tp,n])=>br(
+            tp==='holdWarning'?'Hold Alerts':tp==='message'?'Messages':tp==='announcement'?'Announcements':tp,
+            n,mx,'var(--teal)',true)).join('');})()}</div>`:'<div class="empty">No data.</div>'}
+      </div>
+      <div class="panel"><h3>Top Senders</h3>
+        ${bcSenders.length?`<div class="blist">${(()=>{const mx=bcSenders[0]?.[1]||1;
+          return bcSenders.map(([name,n])=>br(name,n,mx,'var(--gold)',true)).join('');})()}</div>`:'<div class="empty">No data.</div>'}
+      </div>
+    </div>`);
+
+  /* 11 – TABLE UTILISATION */
+  const topTables=Object.entries(d.byTable).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  const topTC=Object.entries(d.turnCountsByTable).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  if(topTables.length||topTC.length)
+    h+=sec('Table Utilisation',`
+      <div class="two-col">
+        ${topTables.length?`<div class="panel"><h3>Most-Seated Tables</h3><div class="blist">
+          ${(()=>{const mx=topTables[0]?.[1]||1; return topTables.map(([id,n])=>br('Table '+id,n,mx,'var(--gold)',true)).join('');})()}
+        </div></div>`:''}
+        ${topTC.length?`<div class="panel"><h3>Highest All-Time Turn Counts</h3><div class="blist">
+          ${(()=>{const mx=topTC[0]?.[1]||1; return topTC.map(([id,n])=>br('Table '+id,n,mx,'var(--teal)',true)).join('');})()}
+        </div></div>`:''}
+      </div>`);
+
+  /* 12 – DAILY BREAKDOWN */
+  h+=sec('Daily Breakdown',`
+    <div class="panel"><h3>Service Day Summary</h3>
+      <table class="dt"><thead><tr>
+        <th>Service Date</th><th style="text-align:right">Seatings</th>
+        <th style="text-align:right">Resets</th><th style="text-align:right">Covers</th>
+        <th style="text-align:right">Avg Party</th>
+      </tr></thead><tbody>
+      ${d.days.map(dk=>{const v=d.perDay[dk]; return `<tr>
+        <td style="color:var(--mid)">${dk}</td>
+        <td class="r">${fmt(v.seatings)}</td>
+        <td class="r">${fmt(v.resets)}</td>
+        <td class="r" style="color:var(--gold2)">${fmt(v.covers)}</td>
+        <td class="r" style="color:var(--dim)">${v.seatings?(v.covers/v.seatings).toFixed(1):'—'}</td>
+      </tr>`; }).join('')}
+      </tbody></table>
+    </div>`);
+
+  /* 13 – EVENT LOG */
+  const recentEv=d.eventLog.slice(0,60);
+  if(recentEv.length)
+    h+=sec('Recent Event Log',`
+      <div class="panel"><h3>Last ${recentEv.length} Recorded Actions</h3>
+        <table class="dt"><thead><tr>
+          <th>Time</th><th>Action</th><th>Table</th><th>Turn</th><th>Covers</th><th>Staff</th><th>Note</th>
+        </tr></thead><tbody>
+        ${recentEv.map(e=>`<tr>
+          <td style="color:var(--dim);white-space:nowrap">${fmtTime(e.ts)}</td>
+          <td>${abadge(e.action)}</td>
+          <td style="color:var(--gold2)">${esc(e.table||'—')}</td>
+          <td class="r">${e.turn||'—'}</td>
+          <td class="r">${e.covers?fmt(e.covers):'—'}</td>
+          <td style="color:var(--mid);font-size:10px">${esc(e.staff||'—')}</td>
+          <td style="color:var(--dim);font-size:10px">${e.note?esc(e.note.slice(0,40)):''}</td>
+        </tr>`).join('')}
+        </tbody></table>
+      </div>`);
+
+  document.getElementById('report-body').innerHTML=h;
+}
+
+/* ── builders ── */
+function sec(title,inner){ return `<div class="sec"><div class="sec-title">${esc(title)}</div>${inner}</div>`; }
+
+function hc(val,lbl,sub,accent){
+  return `<div class="hcard" style="--accent:${accent}">
+    <div class="hc-v">${val}</div>
+    <div class="hc-l">${lbl}</div>
+    ${sub?`<div class="hc-s">${sub}</div>`:''}
+  </div>`;
+}
+
+function br(label,val,max,color,showPct){
+  const w=max?pct(val,max):0;
+  return `<div class="brow">
+    <div class="br-l">${esc(label)}</div>
+    <div class="btrack"><div class="bfill" style="width:${w}%;background:${color}"></div></div>
+    <div class="br-v">${fmt(val)}${showPct?`<span class="br-p"> ${pct(val,max)}%</span>`:''}</div>
+  </div>`;
+}
+
+function sbadge(s){
+  const m={triggered:['bg-green','Triggered'],confirmed:['bg-green','Confirmed'],active:['bg-gold','Active'],
+    draft:['bg-teal','Draft'],cancelled:['bg-red','Cancelled'],completed:['bg-teal','Completed'],pending:['bg-purple','Pending']};
+  const [cls,lbl]=m[s]||['bg-gold',s];
+  return `<span class="badge ${cls}">${esc(lbl)}</span>`;
+}
+
+function abadge(a){
+  const m={seat:['bg-gold','✓ Seat'],clear:['bg-teal','↺ Clear'],combine:['bg-purple','⊕ Combine'],split:['bg-gold','⊘ Split']};
+  const [cls,lbl]=m[a]||['bg-teal',a||'—'];
+  return `<span class="badge ${cls}">${esc(lbl)}</span>`;
+}
+
+/* ── CSV ── */
+function downloadCSV(){
+  if(!_report) return;
+  const d=_report, rows=[];
+  rows.push(['Eclipse Deck 7 — Service Analytics']);
+  rows.push(['Generated',new Date().toLocaleString()]);
+  rows.push(['Service days',d.dayCount]);
+  rows.push([]);
+  rows.push(['HEADLINE STATS']);
+  [['Total covers',d.totalCovers],['Tables seated',d.totalSeatings],['Tables turned',d.totalResets],
+   ['Avg party size',d.avgPartySize.toFixed(2)],['Avg dining time (min)',d.avgDur],
+   ['Median dining time (min)',d.median],['% turned under 90 min',d.pctUnder90],
+   ['Max dining time (min)',d.durMax],['Balance score (%)',d.balanceScore],
+   ['Active crew',d.activeCrew],['Broadcasts sent',d.bcTotal],
+   ['Combined seatings',d.combinedCount],['Shared tables',d.sharingCount],
+   ['Hold groups',d.holdsTotal],['Holds fulfilled',d.holdsTriggered],
+   ['Unique staterooms',d.uniqueSR]].forEach(r=>rows.push(r));
+  rows.push([]);
+  rows.push(['TURN DISTRIBUTION']);
+  [1,2,3,4].forEach(t=>rows.push([t+' turn',d.turnDist[t]||0]));
+  rows.push([]);
+  rows.push(['DURATION DISTRIBUTION']);
+  Object.entries(d.durBuckets).forEach(([k,v])=>rows.push([k,v]));
+  rows.push([]);
+  rows.push(['STAFF','Seatings','Resets','Covers']);
+  Object.entries(d.byStaff).sort((a,b)=>b[1].covers-a[1].covers).forEach(([n,s])=>rows.push([n,s.seatings,s.resets,s.covers]));
+  rows.push([]);
+  rows.push(['DAILY','Seatings','Resets','Covers']);
+  d.days.forEach(dk=>{const v=d.perDay[dk]; rows.push([dk,v.seatings,v.resets,v.covers]);});
+  rows.push([]);
+  rows.push(['TOP STATEROOMS','Visits']);
+  d.topSR.forEach(([sr,c])=>rows.push([sr,c]));
+  rows.push([]);
+  rows.push(['TOP TABLES (seatings)','Count']);
+  Object.entries(d.byTable).sort((a,b)=>b[1]-a[1]).slice(0,30).forEach(([id,n])=>rows.push([id,n]));
+  rows.push([]);
+  rows.push(['RESERVATION HOLDS','Date','Time','Tables','Note','Status']);
+  d.holdsList.forEach(h2=>rows.push(['',h2.date,h2.time,h2.tables,h2.note,h2.status]));
+  if(d.ctList.length){
+    rows.push([]);
+    rows.push(["CHEF'S TABLE",'Date','Status','Seats','Guests','Notes']);
+    d.ctList.forEach(ev=>rows.push(['',ev.date,ev.status,ev.seatCount,ev.guestCount,ev.notes]));
+  }
+  const csv=rows.map(r=>r.map(c=>{
+    const s=String(c==null?'':c);
+    return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+  }).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='eclipse-deck7-report-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+function resetView(){
+  document.getElementById('report').classList.remove('show');
+  document.getElementById('connect').style.display='block';
+  setStatus('');
+}
+</script>
+</body>
+</html>
