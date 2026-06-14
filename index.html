@@ -11064,6 +11064,31 @@ function _ctBuildCardDoc(guests, ev) {
 }
 
 
+// Build envelope doc \u2014 one page per guest.
+// Page: 9.5" \u00d7 4.13" landscape (684 \u00d7 297.36 pt)
+// Margins: top 0.25" (18pt), left 0.79" (56.88pt), bottom 0.5" (36pt), right 0.5" (36pt)
+// Content starts at 0.5" / 0.5" \u2014 stateroom, then 3 line-heights gap, then name.
+function _ctBuildEnvelopeDoc(guests) {
+  const { jsPDF } = window.jspdf;
+  const PW = 9.5 * 72, PH = 4.13 * 72;          // 684 \u00d7 297.36 pt
+  const INK = [22, 28, 38];
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: [PH, PW] });
+  const LH = 22;   // line height for 18pt text
+  const X  = 0.5 * 72;   // 36pt from left
+  const Y0 = 0.5 * 72;   // 36pt from top \u2014 stateroom baseline
+
+  guests.forEach((g, idx) => {
+    if (idx > 0) doc.addPage([PH, PW], 'landscape');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(...INK);
+    doc.text(g.stateroom || '', X, Y0);
+    doc.setFont('helvetica', 'normal');
+    doc.text(g.name || '', X, Y0 + 3 * LH);
+  });
+  return doc;
+}
+
 function ctGenerateInvitePack() {
   const guests = _ctGuestList();
   if (!guests.length) { setStatus('No guests to invite yet'); return; }
@@ -11071,18 +11096,20 @@ function ctGenerateInvitePack() {
   const tag = ev.date || 'event';
   setStatus('Building invitation pack\u2026');
   Promise.all([_loadPdfLib(), _loadZipLib(), _ctLoadLogo()]).then(([, , logo]) => {
-    const letterDoc = _ctBuildLetterDoc(logo);
-    const cardDoc   = _ctBuildCardDoc(guests, ev);
+    const letterDoc   = _ctBuildLetterDoc(logo);
+    const cardDoc     = _ctBuildCardDoc(guests, ev);
+    const envelopeDoc = _ctBuildEnvelopeDoc(guests);
     const zip = new window.JSZip();
-    zip.file('chefs_table_letters_' + tag + '.pdf', letterDoc.output('blob'));
-    zip.file('chefs_table_cards_'   + tag + '.pdf', cardDoc.output('blob'));
+    zip.file('chefs_table_letters_'   + tag + '.pdf', letterDoc.output('blob'));
+    zip.file('chefs_table_cards_'     + tag + '.pdf', cardDoc.output('blob'));
+    zip.file('chefs_table_envelopes_' + tag + '.pdf', envelopeDoc.output('blob'));
     return zip.generateAsync({ type: 'blob' }).then(blob => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = 'chefs_table_invitations_' + tag + '.zip';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      setStatus('Pack downloaded \u2014 letters + fold cards zipped');
+      setStatus('Pack downloaded \u2014 letters + fold cards + envelopes zipped');
     });
   }).catch(() => setStatus('Could not build pack \u2014 check connection'));
 }
