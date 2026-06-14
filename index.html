@@ -10950,7 +10950,7 @@ function _ctBuildLetterDoc(logo) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
   const GOLD = [176, 141, 56], INK = [22, 28, 38];
-  const ML = 64, MR = pageW - 64, textW = MR - ML;
+  const ML = 72, MR = 540, textW = MR - ML;
   function para(text, y, opts) {
     opts = opts || {}; const size = opts.size || 10;
     doc.setFont('times', opts.style || 'normal'); doc.setFontSize(size); doc.setTextColor(...(opts.color || INK));
@@ -10964,20 +10964,19 @@ function _ctBuildLetterDoc(logo) {
   }
   guests.forEach((g, idx) => {
     if (idx > 0) doc.addPage();
-    const cx = pageW / 2; let topY = 56;
+    const cx = pageW / 2; let topY = 36;
     if (logo) {
       const lw = 96, lh = lw * (logo.h / logo.w);
-      doc.addImage(logo.dataUrl, logo.fmt, cx - lw / 2, 34, lw, lh); topY = 34 + lh + 14;
+      doc.addImage(logo.dataUrl, logo.fmt, cx - lw / 2, 36, lw, lh); topY = 36 + lh + 14;
     } else {
       doc.setFont('times', 'normal'); doc.setFontSize(12); doc.setTextColor(...GOLD);
-      doc.text('SUN PRINCESS', cx, 52, { align: 'center' }); topY = 64;
+      doc.text('SUN PRINCESS', cx, 48, { align: 'center' }); topY = 58;
     }
-    doc.setDrawColor(...GOLD); doc.setLineWidth(0.8); doc.line(ML, topY, MR, topY);
     doc.setFont('times', 'bold'); doc.setFontSize(14); doc.setTextColor(...INK);
     doc.text("CHEF'S TABLE GUEST LETTER", cx, topY + 22, { align: 'center' });
     let y = topY + 48;
     doc.setFont('times', 'normal'); doc.setFontSize(10); doc.setTextColor(...INK);
-    doc.text(dateStr, MR, y, { align: 'right' }); y += 20;
+    doc.text(dateStr, ML, y); y += 36;
     doc.text('Stateroom: ' + (g.stateroom || ''), ML, y); y += 15;
     doc.text('Dear ' + g.name + ',', ML, y); y += 18;
     y = para('Thank you for your interest in our exclusive Chef\u2019s Table dining experience! We are delighted to welcome you on a culinary adventure that offers the very best of our flavorful cuisine, freshly prepared just for you by our Executive Chef.', y); y += 7;
@@ -11001,7 +11000,6 @@ function _ctBuildLetterDoc(logo) {
     doc.setFont('times', 'bold'); doc.setFontSize(10); doc.setTextColor(...INK);
     doc.text(hgm + ',', ML, y); y += 13;
     doc.setFont('times', 'normal'); doc.text('Hotel General Manager', ML, y); y += 13; doc.text('Sun Princess', ML, y);
-    doc.setDrawColor(...GOLD); doc.setLineWidth(0.4); doc.line(ML, pageH - 46, MR, pageH - 46);
   });
   return doc;
 }
@@ -11021,20 +11019,20 @@ function _ctBuildCardDoc(guests, ev) {
 
   const PW = 360, PH = 576;
   const ML = 36, MR = PW - 22.32, cx = PW / 2, textW = MR - ML;
-  const INK = [22, 28, 38], LH = 12, GAP = 3;
+  const INK = [22, 28, 38], LH = 11, GAP = 3;
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: [PW, PH] });
 
   guests.forEach((g, idx) => {
     if (idx > 0) doc.addPage([PW, PH], 'portrait');
 
-    // PAGE 1 — invitation text at 4.25" from top
-    let y = 4.25 * 72;  // 306pt
+    // PAGE 1 — invitation text at 5" from top
+    let y = 5 * 72;  // 360pt
 
     function row(text, opts) {
       opts = opts || {};
       doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
-      doc.setFontSize(10); doc.setTextColor(...INK);
+      doc.setFontSize(9); doc.setTextColor(...INK);
       if (!text) { y += LH + (opts.gap != null ? opts.gap : GAP); return; }
       doc.splitTextToSize(text, textW).forEach(ln => {
         doc.text(ln, cx, y, { align: 'center' }); y += LH;
@@ -11049,6 +11047,7 @@ function _ctBuildCardDoc(guests, ev) {
       : 'Please, meet our Director of Restaurant operations at the meeting point.');
     row('');
     row('For this unique experience, we suggest a formal attire.');
+    row('Due to the event’s exclusivity, a ' + price + ' + ' + tax + ' will be charged to your folio.');
     row(''); row('');
     row('Director of Restaurant Operations', { gap: 2 });
     if (dorName) row(dorName, { gap: 2 });
