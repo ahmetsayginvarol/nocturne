@@ -11545,7 +11545,7 @@ function ctGenerateBadges() {
       doc.line(cx - ruleW/2, y, cx + ruleW/2, y); y += 16;
 
       ct("CHEF'S TABLE", y, { size: 7.5, color: GOLD, spacing: 2.5 }); y += 16;
-      ct(g.name, y, { style: 'bold', size: 20, color: INK }); y += 16;
+      ct(g.name, y + 36, { style: 'bold', size: 20, color: INK }); y += 16;
 
       // ── TOP HALF (mirrored 180°) ──
       // Mirror logo (flipped via canvas)
@@ -11563,7 +11563,7 @@ function ctGenerateBadges() {
       doc.line(cx - ruleW/2, mir(bRuleY), cx + ruleW/2, mir(bRuleY));
 
       ct180("CHEF'S TABLE", mir(bRuleY + 16), { size: 7.5, color: GOLD, spacing: 2.5 });
-      ct180(g.name, mir(bRuleY + 32), { style: 'bold', size: 20, color: INK });
+      ct180(g.name, mir(bRuleY + 32 + 36), { style: 'bold', size: 20, color: INK });
     });
 
     doc.save('chefs_table_badges_' + (ev.date || 'event') + '.pdf');
