@@ -11405,21 +11405,51 @@ function _ctBuildCardDoc(guests, ev) {
 // Content starts at 0.5" / 0.5" \u2014 stateroom, then 3 line-heights gap, then name.
 function _ctBuildEnvelopeDoc(guests) {
   const { jsPDF } = window.jspdf;
-  const PW = 9.5 * 72, PH = 4.13 * 72;          // 684 \u00d7 297.36 pt
+  const PW = 9.5 * 72, PH = 4.13 * 72;
   const INK = [22, 28, 38];
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: [PH, PW] });
-  const LH = 22;   // line height for 18pt text
-  const X  = 1.25 * 72;  // 90pt from left (0.5" + 0.75" shift)
-  const Y0 = 1.0 * 72;   // 72pt from top (0.5" + 0.5" shift)
+  const LH = 22;
+  const X  = 1.25 * 72;
+  const Y0 = 1.0 * 72;
 
-  guests.forEach((g, idx) => {
+  // Build envelope entries: 2 guests in same stateroom with the same last name
+  // get a single "Mr. & Mrs. LastName" envelope; everyone else gets their own.
+  function _lastName(name) {
+    const parts = (name || '').trim().split(/\s+/);
+    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+  }
+
+  const entries = [];
+  const used = new Set();
+  guests.forEach((g, i) => {
+    if (used.has(i)) return;
+    if (g.stateroom) {
+      // Look for exactly one other guest sharing the same stateroom + last name
+      const partner = guests.findIndex((h, j) =>
+        j !== i && !used.has(j) &&
+        h.stateroom === g.stateroom &&
+        _lastName(h.name) === _lastName(g.name)
+      );
+      if (partner !== -1 && guests.filter((h, j) =>
+          j !== i && !used.has(j) && h.stateroom === g.stateroom
+        ).length === 1) {
+        // Exactly 2 in same room with same last name \u2192 combined envelope
+        const lastName = (g.name || '').trim().split(/\s+/).pop();
+        entries.push({ stateroom: g.stateroom, name: 'Mr. & Mrs. ' + lastName });
+        used.add(i); used.add(partner);
+        return;
+      }
+    }
+    entries.push({ stateroom: g.stateroom, name: g.name });
+    used.add(i);
+  });
+
+  entries.forEach((e, idx) => {
     if (idx > 0) doc.addPage([PH, PW], 'landscape');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.setTextColor(...INK);
-    doc.text(g.stateroom || '', X, Y0);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(...INK);
+    doc.text(e.stateroom || '', X, Y0);
     doc.setFont('helvetica', 'normal');
-    doc.text(g.name || '', X, Y0 + 3 * LH);
+    doc.text(e.name || '', X, Y0 + 3 * LH);
   });
   return doc;
 }
@@ -11544,8 +11574,7 @@ function ctGenerateBadges() {
       doc.setDrawColor(...GOLD); doc.setLineWidth(0.6);
       doc.line(cx - ruleW/2, y, cx + ruleW/2, y); y += 16;
 
-      ct("CHEF'S TABLE", y, { size: 7.5, color: GOLD, spacing: 2.5 }); y += 16;
-      ct(g.name, y + 36, { style: 'bold', size: 20, color: INK }); y += 16;
+      ct(g.name, y + 16, { style: 'bold', size: 20, color: INK }); y += 16;
 
       // ── TOP HALF (mirrored 180°) ──
       // Mirror logo (flipped via canvas)
@@ -11562,8 +11591,7 @@ function ctGenerateBadges() {
       doc.setDrawColor(...GOLD); doc.setLineWidth(0.6);
       doc.line(cx - ruleW/2, mir(bRuleY), cx + ruleW/2, mir(bRuleY));
 
-      ct180("CHEF'S TABLE", mir(bRuleY + 16), { size: 7.5, color: GOLD, spacing: 2.5 });
-      ct180(g.name, mir(bRuleY + 32 + 36), { style: 'bold', size: 20, color: INK });
+      ct180(g.name, mir(bRuleY + 32), { style: 'bold', size: 20, color: INK });
     });
 
     doc.save('chefs_table_badges_' + (ev.date || 'event') + '.pdf');
