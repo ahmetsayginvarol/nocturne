@@ -11413,7 +11413,7 @@ function _ctBuildEnvelopeDoc(guests) {
   const Y0 = 1.0 * 72;
 
   // Build envelope entries: 2 guests in same stateroom with the same last name
-  // get a single "Mr. & Mrs. LastName" envelope; everyone else gets their own.
+  // get a single combined envelope with both full names; everyone else gets their own.
   function _lastName(name) {
     const parts = (name || '').trim().split(/\s+/);
     return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
@@ -11424,7 +11424,6 @@ function _ctBuildEnvelopeDoc(guests) {
   guests.forEach((g, i) => {
     if (used.has(i)) return;
     if (g.stateroom) {
-      // Look for exactly one other guest sharing the same stateroom + last name
       const partner = guests.findIndex((h, j) =>
         j !== i && !used.has(j) &&
         h.stateroom === g.stateroom &&
@@ -11433,23 +11432,36 @@ function _ctBuildEnvelopeDoc(guests) {
       if (partner !== -1 && guests.filter((h, j) =>
           j !== i && !used.has(j) && h.stateroom === g.stateroom
         ).length === 1) {
-        // Exactly 2 in same room with same last name \u2192 combined envelope
-        const lastName = (g.name || '').trim().split(/\s+/).pop();
-        entries.push({ stateroom: g.stateroom, name: 'Mr. & Mrs. ' + lastName });
+        // Exactly 2 in same room with same last name \u2192 combined envelope (both full names)
+        entries.push({ stateroom: g.stateroom, name1: g.name || '', name2: guests[partner].name || '' });
         used.add(i); used.add(partner);
         return;
       }
     }
-    entries.push({ stateroom: g.stateroom, name: g.name });
+    entries.push({ stateroom: g.stateroom, name1: g.name || '', name2: null });
     used.add(i);
   });
+
+  const MAX_W = PW - X - 36; // available width to right of X
 
   entries.forEach((e, idx) => {
     if (idx > 0) doc.addPage([PH, PW], 'landscape');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(...INK);
     doc.text(e.stateroom || '', X, Y0);
     doc.setFont('helvetica', 'normal');
-    doc.text(e.name || '', X, Y0 + 3 * LH);
+    if (e.name2) {
+      // Try single-line first: "Name1 & Name2"
+      const combined = e.name1 + ' & ' + e.name2;
+      if (doc.getTextWidth(combined) <= MAX_W) {
+        doc.text(combined, X, Y0 + 3 * LH);
+      } else {
+        // Too long \u2014 first name on its own line, second name on the next
+        doc.text(e.name1 + ' &', X, Y0 + 3 * LH);
+        doc.text(e.name2,        X, Y0 + 4 * LH);
+      }
+    } else {
+      doc.text(e.name1, X, Y0 + 3 * LH);
+    }
   });
   return doc;
 }
