@@ -14037,11 +14037,12 @@ function cancelHoldReservation(id) {
   if (groupId && state.softBlocks && state.softBlocks[groupId]) {
     delete state.softBlocks[groupId];
     db.ref('eclipse/deck7/softBlocks/' + groupId).remove().catch(() => {});
-    // Clear any fired warning keys for this group so they don't linger
-    if (_holdWarningsFired && _holdWarningsFired.forEach) {
-      const stale = [];
-      _holdWarningsFired.forEach(k => { if (k.indexOf(groupId + ':') === 0) stale.push(k); });
-      stale.forEach(k => _holdWarningsFired.delete(k));
+    // Mark ALL warning keys for this group as fired so the tick skips it on every
+    // device even if Firebase propagation is delayed by a few seconds.
+    if (_holdWarningsFired) {
+      ['10block', '45min', 'overdue', '20cancel'].forEach(function(k) {
+        _holdWarningsFired.add(groupId + ':' + k);
+      });
     }
   }
 
@@ -14581,10 +14582,10 @@ function _cancelOverdueReservation(groupId) {
     db.ref('eclipse/deck7/softBlocks/' + groupId).remove().catch(() => {});
   }
 
-  if (_holdWarningsFired && _holdWarningsFired.forEach) {
-    const stale = [];
-    _holdWarningsFired.forEach(k => { if (k.indexOf(groupId + ':') === 0) stale.push(k); });
-    stale.forEach(k => _holdWarningsFired.delete(k));
+  if (_holdWarningsFired) {
+    ['10block', '45min', 'overdue', '20cancel'].forEach(function(k) {
+      _holdWarningsFired.add(groupId + ':' + k);
+    });
   }
 
   _closeHoldModal();
