@@ -11571,7 +11571,7 @@ function ctGenerateBadges() {
 
       // ── BOTTOM HALF (upright) ──
       const bTop = midY;
-      let y = bTop + 54;
+      let y = bTop + 108;  // 0.75" lower than before (54pt shift)
 
       // Logo or wordmark
       if (logo) {
@@ -11592,14 +11592,14 @@ function ctGenerateBadges() {
       // Mirror logo (flipped via canvas)
       if (logo && logoFlipped) {
         const lh = LW * (logo.h / logo.w);
-        const mLogoTop = mir(bTop + 54 + lh);
+        const mLogoTop = mir(bTop + 108 + lh);
         doc.addImage(logoFlipped.dataUrl, 'PNG', cx - LW / 2, mLogoTop, LW, lh);
       } else {
-        ct180('SUN PRINCESS', mir(bTop + 54 + 8), { size: 8, color: GOLD, spacing: 2 });
+        ct180('SUN PRINCESS', mir(bTop + 108 + 8), { size: 8, color: GOLD, spacing: 2 });
       }
 
       // Mirror gold rule
-      const bRuleY = logo ? bTop + 54 + LW * (logo.h / logo.w) + 6 : bTop + 72;
+      const bRuleY = logo ? bTop + 108 + LW * (logo.h / logo.w) + 6 : bTop + 126;
       doc.setDrawColor(...GOLD); doc.setLineWidth(0.6);
       doc.line(cx - ruleW/2, mir(bRuleY), cx + ruleW/2, mir(bRuleY));
 
