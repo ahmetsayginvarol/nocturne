@@ -13171,20 +13171,36 @@ function applyLassoReview() {
 
   _captureUndo('Lasso apply ' + _lassoReviewIds.join(', '));
   const ops = {};
-
-  // Collect tables flagged for seating — open modal instead of direct write
-  const pendingSeatIds = [];
-  _lassoReviewIds.forEach(id => {
-    const s = _lassoReviewState[id];
-    if (s && s.action === 'seat') pendingSeatIds.push(id);
-  });
+  const seatedIds = [];
 
   _lassoReviewIds.forEach(id => {
     const s = _lassoReviewState[id];
     if (!s) return;
 
     if (s.action === 'seat') {
-      // handled below via showSeatModal
+      const seating = Math.min((state.turnCounts[id] || 0) + 1, 4);
+      const entry = {
+        occupied: true,
+        seating,
+        staterooms: [],
+        covers:     s.covers || 2,
+        sharing:    false,
+        seatedAt:   Date.now(),
+        seatedBy:   DEVICE_ID || '',
+      };
+      state.tables[id]     = { ...entry };
+      state.turnCounts[id] = seating;
+      ops['tables/'     + id] = state.tables[id];
+      ops['turnCounts/' + id] = seating;
+      seatedIds.push(id);
+      recordLateSeatingTonight(id);
+      recordSeatingForHints(id);
+      archiveSeatingEvent({
+        tableId: id, seating, covers: entry.covers,
+        staterooms: [], sharing: false,
+        seatedAt: entry.seatedAt, seatedBy: DEVICE_ID || '',
+        combinedWith: [],
+      });
     } else if (s.action === 'reset') {
       const group = getCombinedGroup(id) || [id];
       group.forEach(tid => {
@@ -13207,11 +13223,13 @@ function applyLassoReview() {
   });
 
   // Capture display lists before closeLassoReview() clears the state maps
+  const seatedList = [];
   const cancelList = [];
   const resetList  = [];
   _lassoReviewIds.forEach(id => {
     const s = _lassoReviewState[id];
     if (!s) return;
+    if (s.action === 'seat')   seatedList.push(id);
     if (s.action === 'cancel') cancelList.push(id);
     if (s.action === 'reset')  resetList.push(id);
   });
@@ -13220,25 +13238,15 @@ function applyLassoReview() {
     _tableOp(ops);
     recordSeatingActivity();
   }
-
   closeLassoReview();
   renderAll();
+  if (seatedIds.length) _flashMarker(seatedIds[0], 'seat');
 
   const parts = [];
+  if (seatedList.length) parts.push('Seated ' + seatedList.join(', '));
   if (cancelList.length) parts.push('Cancelled ' + cancelList.join(', '));
   if (resetList.length)  parts.push('Reset ' + resetList.join(', '));
-  if (parts.length) setStatus(parts.join(' · '));
-
-  // Open seat modal for tables needing seating — user picks covers/staterooms
-  if (pendingSeatIds.length) {
-    if (pendingSeatIds.length > 1) {
-      _pendingGroupSeat = pendingSeatIds;
-      window._pendingGroupCovers = null; // let user set in modal
-    }
-    showSeatModal(pendingSeatIds[0]);
-  } else if (!parts.length) {
-    setStatus('No changes applied');
-  }
+  setStatus(parts.length ? parts.join(' · ') : 'No changes applied');
 
 }
 
