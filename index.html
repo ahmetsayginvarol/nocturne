@@ -8976,6 +8976,7 @@ function _onFsChange() {
 // Reset Entire Floor is locked during dinner service (17:00–21:30) to prevent
 // catastrophic accidental wipes mid-service.
 function _isResetLocked(d) {
+  return false; // TEMP: time restriction disabled — re-enable when ready
   d = d || new Date();
   const mins = d.getHours() * 60 + d.getMinutes();
   return mins >= (17 * 60) && mins <= (21 * 60 + 30);
