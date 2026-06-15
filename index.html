@@ -7332,6 +7332,13 @@ function showSeatModal(id) {
         onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text-dim)'">
         ⊘ BLOCK TABLE
       </button>
+      ${(_softBlockState(id) || (tState && tState.holdGroupId)) ? `
+      <button onclick="_confirmCancelReservation('${id}')"
+        style="background:transparent;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.65);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;margin-left:8px;"
+        onmouseover="this.style.borderColor='rgba(239,68,68,0.7)';this.style.color='#ef4444'"
+        onmouseout="this.style.borderColor='rgba(239,68,68,0.35)';this.style.color='rgba(239,68,68,0.65)'">
+        ✕ CANCEL RESERVATION
+      </button>` : ''}
     </div>`;
 
   document.getElementById('modal').innerHTML = html;
@@ -13974,6 +13981,30 @@ function softBlockOverride(groupId, id) {
 
 // Cancel an entire hold reservation: release all tables to available and
 // delete the soft block group so warnings stop. No one is seated.
+function _confirmCancelReservation(id) {
+  // Identify the group so we can show the note in the confirm prompt
+  let note = '', tableCount = 1;
+  const ts = state.tables[id] || {};
+  if (ts.holdGroupIds) tableCount = ts.holdGroupIds.length;
+  const sb = _softBlockState(id);
+  if (sb) { note = sb.group.note || ''; tableCount = (sb.group.tableIds || [id]).length; }
+  else if (ts.holdGroupId && state.softBlocks && state.softBlocks[ts.holdGroupId]) {
+    const g = state.softBlocks[ts.holdGroupId];
+    note = g.note || '';
+    tableCount = (g.tableIds || [id]).length;
+  }
+  const noteStr = note ? ' for <b>' + note + '</b>' : '';
+  const tablesStr = tableCount > 1 ? tableCount + ' tables' : 'this table';
+  document.getElementById('modal').innerHTML = `
+    <h2 style="color:#ef4444;">CANCEL RESERVATION?</h2>
+    <div class="m-sub">This will release ${tablesStr}${noteStr} back to available.<br>This cannot be undone without re-marking.</div>
+    <div class="m-btns" style="margin-top:20px">
+      <button class="btn-d" style="border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,0.08);"
+        onclick="cancelHoldReservation('${id}')">✕ YES, CANCEL RESERVATION</button>
+      <button class="btn-s" onclick="showSeatModal('${id}')">← KEEP RESERVATION</button>
+    </div>`;
+}
+
 function cancelHoldReservation(id) {
   const ts = state.tables[id] || {};
   // Figure out which tables belong to this reservation
