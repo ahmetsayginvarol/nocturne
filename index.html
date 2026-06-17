@@ -7534,6 +7534,25 @@ function showInfoModal(id) {
     ? `<button class="btn-p" style="flex:1;min-width:90px;background:var(--teal);color:#001a17;" onclick="showAddGuestsModal('${id}')">➕ ADD GUESTS</button>`
     : '';
 
+  // Pending reservation banner — shown when this table is in an active soft-block
+  // group but still occupied. Lets staff view/cancel the reservation without
+  // losing access to the current guest info.
+  const _pendingSb = _softBlockState(id);
+  const pendingResHtml = (_pendingSb && _pendingSb.gstate === 'pending') ? (() => {
+    const pg = _pendingSb.group;
+    const pNote = pg.note || 'reservation';
+    const pTime = _fmtHoldTime(pg.targetTime);
+    const pLeft = _fmtTimeLeft(pg.targetTime);
+    const pCol  = _timeLeftColor(pg.targetTime);
+    return `<div style="margin-top:10px;padding:10px 12px;background:rgba(234,179,8,0.07);border:1px solid rgba(234,179,8,0.35);border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <div style="font-size:11px;color:var(--gold);line-height:1.5;">
+        ⏱ <strong>${pNote}</strong> at ${pTime}
+        <span style="color:${pCol};margin-left:6px;">${pLeft}</span>
+      </div>
+      <button onclick="closeModal();_showHeldModal('${id}',state.softBlocks[Object.keys(state.softBlocks).find(k=>state.softBlocks[k]&&state.softBlocks[k].tableIds&&state.softBlocks[k].tableIds.includes('${id}'))])" style="background:transparent;border:1px solid rgba(234,179,8,0.5);color:var(--gold);font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">VIEW RESERVATION</button>
+    </div>`;
+  })() : '';
+
   const html = `
     <h2 style="color:${sColor}">TABLE ${tableLabel}</h2>
     <div class="m-sub" style="color:${sColor};opacity:.8">${turnNames[tState.seating] || ''}</div>
@@ -7546,6 +7565,7 @@ function showInfoModal(id) {
       <div class="info-row">Elapsed <span style="color:${sColor}">${elapsedStr}</span></div>
       ${group ? `<div class="info-row">Combined <span style="color:#2dd4bf">${group.join(' + ')}</span></div>` : ''}
     </div>
+    ${pendingResHtml}
     <div class="m-btns" style="margin-top:16px;flex-wrap:wrap;gap:6px;">
       ${sharingBtn}
       <button class="btn-s" style="flex:1;min-width:90px;" onclick="showEditModal('${id}')">✎ EDIT</button>
@@ -7620,13 +7640,13 @@ function showBlockedModal(id) {
       ${holdTimeStr}
     </div>
     <div class="m-btns" style="margin-top:16px;flex-wrap:wrap;gap:6px;">
-      ${isBlocker
-        ? `<button class="btn-p" onclick="unblockTable('${id}')">${isHoldGroup ? 'SEAT RESERVATION' : 'UNBLOCK & SEAT GUESTS'}</button>
-           ${isHoldGroup
-             ? `<button class="btn-s" onclick="seatHeldAnyway('${id}')">🪑 SEAT ANYWAY</button>
-                <button class="btn-d" onclick="cancelHoldReservation('${id}')">✕ CANCEL RESERVATION</button>`
-             : `<button class="btn-d" onclick="doUnblockTable('${id}')">⊘ UNBLOCK ONLY</button>`}`
-        : `<button class="btn-p" onclick="requestApproval('${id}')">REQUEST APPROVAL</button>`
+      ${isHoldGroup
+        ? `<button class="btn-p" onclick="unblockTable('${id}')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">🪑 SEAT RESERVATION</button>
+           <button class="btn-d" onclick="cancelHoldReservation('${id}')" style="border-color:rgba(239,68,68,0.7);color:#ef4444;">✕ CANCEL RESERVATION</button>`
+        : (isBlocker
+           ? `<button class="btn-p" onclick="unblockTable('${id}')">UNBLOCK & SEAT GUESTS</button>
+              <button class="btn-d" onclick="doUnblockTable('${id}')">⊘ UNBLOCK ONLY</button>`
+           : `<button class="btn-p" onclick="requestApproval('${id}')">REQUEST APPROVAL</button>`)
       }
       <button class="btn-s" onclick="closeModal()">CLOSE</button>
     </div>`;
@@ -14278,7 +14298,7 @@ function _softBlockWarningTick() {
 
   for (const gid in state.softBlocks) {
     const g = state.softBlocks[gid];
-    if (!g || g.status !== 'active') continue;
+    if (!g || (g.status !== 'active' && g.status !== 'triggered')) continue;
     if (!Array.isArray(g.tableIds)) continue;
 
     // isOwner: only the creating device sends toasts/broadcasts/modals so they
@@ -14290,6 +14310,23 @@ function _softBlockWarningTick() {
     const isOwner = !g.createdBy || g.createdBy === DEVICE_ID;
 
     const minsUntil = Math.round((g.targetTime - Date.now()) / 60000);
+
+    // ── TRIGGERED groups: only fire the -20-min cancel prompt ──
+    // Tables are already hard-blocked; the overdue/block logic no longer applies.
+    // The -20-min cancel modal is the only actionable remaining step.
+    if (g.status === 'triggered') {
+      if (minsUntil <= -20 && isOwner) {
+        const key20 = gid + ':20cancel';
+        if (!_holdWarningsFired.has(key20)) {
+          _holdWarningsFired.add(key20);
+          _showHoldOverdueCancelModal(g);
+          _playHoldChime();
+        }
+      }
+      continue;
+    }
+
+    // ── ACTIVE groups: existing threshold logic ──
     const notReady  = g.tableIds.filter(t => !(g.resetDone && g.resetDone[t])).length;
     if (notReady <= 0) continue;
 
