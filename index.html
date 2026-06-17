@@ -3100,6 +3100,14 @@ body.fs-mode #fs-hud { animation: hud-in 0.35s cubic-bezier(.2,.8,.3,1) both; }
       </div>
     </button>
 
+    <button class="drawer-tool-btn" onclick="closeSettings(); forceRefreshAllDevices();">
+      <span class="dtb-icon">↺</span>
+      <div class="dtb-info">
+        <div class="dtb-title">Force Refresh</div>
+        <div class="dtb-sub">Silently reload all connected devices</div>
+      </div>
+    </button>
+
     <button class="drawer-tool-btn" style="border-color:rgba(230,57,70,0.3);" onclick="closeSettings(); confirmResetAll();">
       <span class="dtb-icon">⊘</span>
       <div class="dtb-info">
@@ -14226,6 +14234,11 @@ function _hardReload() {
 function pushForceReloadToAllTablets() {
   db.ref('eclipse/deck7/_forceReload').set(Date.now()).catch(() => {});
   setStatus('Reload signal sent to all tablets');
+}
+
+function forceRefreshAllDevices() {
+  db.ref('eclipse/deck7/_forceReload').set(Date.now()).catch(() => {});
+  setStatus('↺ Refresh signal sent — all devices reloading…');
 }
 
 // ── 45-min / 10-min / overdue warning tick (PART 6) ───────────────────────
