@@ -7453,6 +7453,31 @@ function confirmSeat(id, confirmed) {
   });
   _tableOp(ops);
   _commitHeldAnyway(id);   // commit hold-group changes (clears restore flag)
+
+  // Remove any active soft block group that contained the seated tables.
+  // seatHoldGroup() clears the table state before opening the modal but never
+  // deletes the soft block record, leaving markers stuck in HELD appearance.
+  if (state.softBlocks) {
+    const groupsToRemove = new Set();
+    ids.forEach(tid => {
+      for (const gid in state.softBlocks) {
+        const g = state.softBlocks[gid];
+        if (g && Array.isArray(g.tableIds) && g.tableIds.indexOf(tid) !== -1) {
+          groupsToRemove.add(gid);
+        }
+      }
+    });
+    groupsToRemove.forEach(gid => {
+      delete state.softBlocks[gid];
+      db.ref('eclipse/deck7/softBlocks/' + gid).remove().catch(() => {});
+      if (_holdWarningsFired) {
+        ['10block', '45min', 'overdue', '20cancel'].forEach(k => {
+          _holdWarningsFired.add(gid + ':' + k);
+        });
+      }
+    });
+  }
+
   renderAll();
   closeModal();
   _flashMarker(id, 'seat');
