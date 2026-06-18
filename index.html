@@ -8972,6 +8972,31 @@ function updateStats() {
 // FULLSCREEN MODE
 // ============================================================
 let _fsMode = false;
+let _fsPreZoom = null; // zoom level saved before entering fullscreen
+
+// Zoom/pan the map so it covers the full wrapper (no letterboxing).
+// Uses cover semantics: scale = max(wrapperW/imgW, wrapperH/imgH) so every
+// pixel of the wrapper is filled, then centre the image.
+function _fitMapFill() {
+  const wrapper = document.getElementById('map-wrapper');
+  const img     = document.getElementById('floor-map');
+  if (!wrapper || !img || !img.naturalWidth) return;
+
+  const rot  = state.mapRotation || 0;
+  const swap = rot === 90 || rot === 270;
+  const imgW = swap ? img.naturalHeight : img.naturalWidth;
+  const imgH = swap ? img.naturalWidth  : img.naturalHeight;
+
+  // Cover: scale to whichever dimension is the limiting one in reverse
+  const scaleW = wrapper.clientWidth  / imgW;
+  const scaleH = wrapper.clientHeight / imgH;
+  const z = Math.max(scaleW, scaleH);
+
+  applyZoomAt(z);
+  // Centre the scaled image in the wrapper
+  wrapper.scrollLeft = Math.max(0, (imgW * z - wrapper.clientWidth)  / 2);
+  wrapper.scrollTop  = Math.max(0, (imgH * z - wrapper.clientHeight) / 2);
+}
 
 function toggleFullscreen() {
   _fsMode = !_fsMode;
@@ -9002,6 +9027,15 @@ function toggleFullscreen() {
     closeShapeEditor();
     closeSettings();
     _restoreFsHudPos();
+    // Save current zoom, then fill the screen after layout settles
+    _fsPreZoom = state.zoom || 1.0;
+    requestAnimationFrame(() => _fitMapFill());
+  } else {
+    // Restore the zoom that was active before fullscreen
+    if (_fsPreZoom !== null) {
+      applyZoomAt(_fsPreZoom);
+      _fsPreZoom = null;
+    }
   }
 }
 
