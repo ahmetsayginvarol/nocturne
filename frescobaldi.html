@@ -874,13 +874,14 @@ function renderDots(){
     dot.querySelector('.dc').textContent=gs.length?cvr+' cvr':'';
     const sel=st.selectedResId;
     const alreadyHere=sel&&st.seating[sel]?.tableId===i;
-    dot.classList.toggle('target-hint',!!sel&&!alreadyHere);
+    dot.classList.toggle('target-hint',!!sel&&!alreadyHere&&gs.length===0);
   }
 }
 
 function handleDotClick(tid){
   if(st.calibrating) return;
-  if(st.selectedResId){
+  const occupied = Object.values(st.seating||{}).some(rec=>rec.tableId===tid);
+  if(st.selectedResId && !occupied){
     const r=st.reservations[st.selectedResId];
     confirm2('CONFIRM SEATING',`Seat <strong>${esc(r?.name||'Guest')}</strong> at Table <strong>${tid}</strong>?`,async()=>{
       await db.ref(`${ROOT}/events/${st.currentId}/seating/${st.selectedResId}`).set({tableId:tid,seatedAt:Date.now(),seatedBy:DID});
