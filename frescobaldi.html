@@ -206,7 +206,7 @@ select.em-input{cursor:pointer}
 <div class="view" id="v-dashboard">
   <div class="topbar">
     <div class="topbar-title">FRESCOBALDI</div>
-    <div class="topbar-meta">SUN PRINCESS · DECK 8</div>
+    <div class="topbar-meta">SUN PRINCESS · DECK 8 <span style="color:var(--gold);margin-left:8px">v3</span></div>
     <button class="tb-btn" onclick="showView('settings')">⚙ SETTINGS</button>
   </div>
   <div class="content">
@@ -219,7 +219,7 @@ select.em-input{cursor:pointer}
       <div class="empty-state"><div class="icon">🍷</div>No events yet. Tap + to create one.</div>
     </div>
   </div>
-  <button class="fab" onclick="createEvent()">+</button>
+  <button class="fab" id="fab-new" onclick="this.style.opacity='.4';createEvent()">+</button>
 </div>
 
 <!-- PREP -->
@@ -409,6 +409,13 @@ select.em-input{cursor:pointer}
 <div class="toast" id="toast"></div>
 
 <script>
+// catch any JS error and show it as a toast
+window.onerror = function(msg,src,line){
+  var t=document.getElementById('toast');
+  if(t){t.textContent='JS ERR L'+line+': '+msg;t.className='toast show err';setTimeout(function(){t.classList.remove('show');},5000);}
+  return false;
+};
+
 // ── CONFIG ──
 const FB  = {
   apiKey:"AIzaSyDNIpnIuJIF1guVUydbAmo_vV7OBNl3a28",
@@ -495,10 +502,11 @@ function bc(s){return({draft:'b-draft',confirmed:'b-confirmed',active:'b-active'
 
 // ── EVENTS CRUD ──
 async function createEvent(){
+  const fab = document.getElementById('fab-new');
   toast('Creating event…');
   try{
     const id = db.ref().push().key;
-    if(!id){ toast('ERROR: could not generate key','err'); return; }
+    if(!id){ toast('ERROR: could not generate key','err'); if(fab) fab.style.opacity=''; return; }
     const p  = st.prefs;
     const ev = {
       date:new Date().toISOString().slice(0,10),
@@ -511,7 +519,7 @@ async function createEvent(){
     st.events[id] = ev;
     toast('Opening event…','ok');
     openEvent(id);
-  } catch(e){ toast('ERROR: '+e.message,'err'); console.error('createEvent',e); }
+  } catch(e){ toast('ERROR: '+e.message,'err'); console.error('createEvent',e); if(fab) fab.style.opacity=''; }
 }
 
 function openEvent(id){
