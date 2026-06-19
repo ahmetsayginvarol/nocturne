@@ -156,9 +156,7 @@ select.em-input{cursor:pointer}
 .fresco-dot.has-guests .dn{color:#1a0a00}
 .fresco-dot.has-guests .dc{color:#3a1800}
 .fresco-dot.target-hint{border-color:var(--teal);background:rgba(45,212,191,.85);animation:dpulse .9s ease-in-out infinite}
-.fresco-dot.target-hint-combo{border-color:var(--s1);background:rgba(244,162,97,.85);animation:dpulse-combo .9s ease-in-out infinite}
 @keyframes dpulse{0%,100%{box-shadow:0 0 0 0 rgba(45,212,191,.9)}50%{box-shadow:0 0 0 10px rgba(45,212,191,.25)}}
-@keyframes dpulse-combo{0%,100%{box-shadow:0 0 0 0 rgba(244,162,97,.9)}50%{box-shadow:0 0 0 10px rgba(244,162,97,.25)}}
 .fresco-dot.calibrate{cursor:grab;border-style:dashed;border-color:var(--gold)!important}
 .fresco-dot.calibrate:active{cursor:grabbing}
 .dot-popover{position:absolute;z-index:30;background:rgba(9,14,25,.97);border:1px solid var(--b2);border-radius:12px;padding:12px 14px;min-width:180px;max-width:240px;box-shadow:0 12px 32px rgba(0,0,0,.6)}
@@ -897,39 +895,65 @@ function buildMap(){
 
 function renderDots(){
   const occ={};
+  const absorbed=new Set();
   for(const[rid,rec] of Object.entries(st.seating||{})){
     if(!rec.tableId) continue;
     if(!occ[rec.tableId])occ[rec.tableId]=[];
     const r=st.reservations[rid];
     if(r) occ[rec.tableId].push({rid,...r});
+    if(rec.combinedWith) rec.combinedWith.forEach(id=>absorbed.add(id));
   }
+  const mc=document.getElementById('map-container');
+  const cw=mc?mc.clientWidth:600, ch=mc?mc.clientHeight:800;
   for(let i=1;i<=31;i++){
     const dot=document.getElementById('dot-'+i);if(!dot) continue;
+    if(absorbed.has(i)){dot.style.display='none';continue;}
+    dot.style.display='';
+    // reset to natural position + circular shape
+    const pos={...DOTS_DEFAULT[i],...(st.dots[i]||{})};
+    dot.style.left=pos.x+'%'; dot.style.top=pos.y+'%';
+    dot.style.width='34px'; dot.style.height='34px'; dot.style.borderRadius='50%';
     const gs=occ[i]||[];
     const cvr=gs.reduce((s,r)=>s+(r.partySize||1),0);
     dot.classList.toggle('has-guests',gs.length>0);
     dot.querySelector('.dc').textContent=gs.length?cvr+' cvr':'';
+    // reshape into pill if this dot is the primary of a combination
+    const combRec=Object.values(st.seating||{}).find(rec=>rec.tableId===i&&rec.combinedWith?.length);
+    if(combRec){
+      const allIds=[i,...combRec.combinedWith];
+      const px_=allIds.map(id=>{const p={...DOTS_DEFAULT[id],...(st.dots[id]||{})};return{x:p.x/100*cw,y:p.y/100*ch};});
+      const minX=Math.min(...px_.map(p=>p.x)), maxX=Math.max(...px_.map(p=>p.x));
+      const minY=Math.min(...px_.map(p=>p.y)), maxY=Math.max(...px_.map(p=>p.y));
+      const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+      const w=Math.max(34,maxX-minX+34), h=Math.max(34,maxY-minY+34);
+      dot.style.left=(cx/cw*100)+'%'; dot.style.top=(cy/ch*100)+'%';
+      dot.style.width=w+'px'; dot.style.height=h+'px';
+      dot.style.borderRadius=(Math.min(w,h)/2)+'px';
+    }
     const sel=st.selectedResId;
     const alreadyHere=sel&&st.seating[sel]?.tableId===i;
-    dot.classList.remove('target-hint','target-hint-combo');
+    dot.classList.remove('target-hint');
     if(sel&&!alreadyHere&&gs.length===0){
       const partySize=st.reservations[sel]?.partySize||1;
       const cap=TABLE_CAPS[i]||4;
       if(cap>=partySize) dot.classList.add('target-hint');
-      else if(findCombine(i,partySize)!==false) dot.classList.add('target-hint-combo');
     }
   }
 }
 
 function handleDotClick(tid){
   if(st.calibrating) return;
-  const occupied=Object.values(st.seating||{}).some(rec=>rec.tableId===tid);
+  const absorbedCheck=new Set();
+  for(const rec of Object.values(st.seating||{})) if(rec.combinedWith) rec.combinedWith.forEach(id=>absorbedCheck.add(id));
+  const occupied=Object.values(st.seating||{}).some(rec=>rec.tableId===tid)||absorbedCheck.has(tid);
   if(st.selectedResId&&!occupied){
     const r=st.reservations[st.selectedResId];
     const partySize=r?.partySize||1;
     const cap=TABLE_CAPS[tid]||4;
-    const doSeat=async()=>{
-      await db.ref(`${ROOT}/events/${st.currentId}/seating/${st.selectedResId}`).set({tableId:tid,seatedAt:Date.now(),seatedBy:DID});
+    const doSeat=async(combinedWith)=>{
+      const rec={tableId:tid,seatedAt:Date.now(),seatedBy:DID};
+      if(combinedWith) rec.combinedWith=combinedWith;
+      await db.ref(`${ROOT}/events/${st.currentId}/seating/${st.selectedResId}`).set(rec);
       st.selectedResId=null;
       updateSelBar();renderGuestPanel();renderDots();
     };
@@ -944,7 +968,7 @@ function handleDotClick(tid){
         const comboDesc=combo.map(id=>`Table ${id} (${TABLE_CAPS[id]}-top)`).join(' + ');
         confirm2('COMBINE TABLES',
           `Table ${tid} is a ${cap}-top — not enough for <strong>${esc(r?.name||'Guest')}</strong>'s party of ${partySize}.<br><br>Suggest combining with ${comboDesc} → <strong>${comboTotal} covers</strong>. Seat at Table ${tid}?`,
-          async()=>{ await doSeat(); toast(`Seated at Table ${tid} — combine with ${combo.join('+')}`, 'ok'); });
+          async()=>{ await doSeat(combo); toast(`Tables ${[tid,...combo].join('+')} combined — ${esc(r?.name||'Guest')} seated`, 'ok'); });
       } else {
         toast(`Table ${tid} seats ${cap} — not enough for party of ${partySize} and no nearby tables to combine`,'err');
       }
