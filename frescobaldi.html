@@ -157,6 +157,9 @@ select.em-input{cursor:pointer}
 .fresco-dot.has-guests .dc{color:#3a1800}
 .fresco-dot.target-hint{border-color:var(--teal);background:rgba(45,212,191,.85);animation:dpulse .9s ease-in-out infinite}
 @keyframes dpulse{0%,100%{box-shadow:0 0 0 0 rgba(45,212,191,.9)}50%{box-shadow:0 0 0 10px rgba(45,212,191,.25)}}
+.fresco-dot.focus-table{border-color:var(--gold)!important;background:rgba(201,168,76,.95)!important;animation:dfocus 1.2s ease-in-out infinite;z-index:10}
+@keyframes dfocus{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,1)}50%{box-shadow:0 0 0 18px rgba(201,168,76,.35)}}
+.fresco-dot.dimmed{opacity:.18;pointer-events:none}
 .fresco-dot.calibrate{cursor:grab;border-style:dashed;border-color:var(--gold)!important}
 .fresco-dot.calibrate:active{cursor:grabbing}
 .dot-popover{position:absolute;z-index:30;background:rgba(9,14,25,.97);border:1px solid var(--b2);border-radius:12px;padding:12px 14px;min-width:180px;max-width:240px;box-shadow:0 12px 32px rgba(0,0,0,.6)}
@@ -955,9 +958,14 @@ function renderDots(){
       dot.style.borderRadius=(Math.min(w,h)/2)+'px';
     }
     const sel=st.selectedResId;
-    const alreadyHere=sel&&st.seating[sel]?.tableId===i;
-    dot.classList.remove('target-hint');
-    if(sel&&!alreadyHere&&gs.length===0){
+    const seatedAt=sel?st.seating[sel]?.tableId:null;
+    const alreadyHere=sel&&seatedAt===i;
+    dot.classList.remove('target-hint','focus-table','dimmed');
+    if(seatedAt){
+      // Selected guest is already seated: glow their table, dim everything else
+      if(i===seatedAt) dot.classList.add('focus-table');
+      else dot.classList.add('dimmed');
+    } else if(sel&&!alreadyHere&&gs.length===0){
       const partySize=st.reservations[sel]?.partySize||1;
       const cap=TABLE_CAPS[i]||4;
       if(cap>=partySize) dot.classList.add('target-hint');
@@ -967,6 +975,10 @@ function renderDots(){
 
 function handleDotClick(tid){
   if(st.calibrating) return;
+  // If selected guest is already seated, only their table is clickable (others have pointer-events:none)
+  if(st.selectedResId&&st.seating[st.selectedResId]?.tableId){
+    showDotPop(tid); return;
+  }
   const absorbedCheck=new Set();
   for(const rec of Object.values(st.seating||{})) if(rec.combinedWith) rec.combinedWith.forEach(id=>absorbedCheck.add(id));
   const occupied=Object.values(st.seating||{}).some(rec=>rec.tableId===tid)||absorbedCheck.has(tid);
