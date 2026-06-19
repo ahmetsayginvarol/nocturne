@@ -219,7 +219,7 @@ select.em-input{cursor:pointer}
       <div class="empty-state"><div class="icon">🍷</div>No events yet. Tap + to create one.</div>
     </div>
   </div>
-  <button class="fab" id="fab-new" onclick="this.style.opacity='.4';createEvent()">+</button>
+  <button class="fab" id="fab-new" onclick="this.style.opacity='.4';newEvent()">+</button>
 </div>
 
 <!-- PREP -->
@@ -501,7 +501,7 @@ function renderDash(){
 function bc(s){return({draft:'b-draft',confirmed:'b-confirmed',active:'b-active',completed:'b-completed',cancelled:'b-cancelled'})[s]||'b-draft';}
 
 // ── EVENTS CRUD ──
-async function createEvent(){
+async function newEvent(){
   const fab = document.getElementById('fab-new');
   toast('Creating event…');
   try{
@@ -519,7 +519,7 @@ async function createEvent(){
     st.events[id] = ev;
     toast('Opening event…','ok');
     openEvent(id);
-  } catch(e){ toast('ERROR: '+e.message,'err'); console.error('createEvent',e); if(fab) fab.style.opacity=''; }
+  } catch(e){ toast('ERROR: '+e.message,'err'); console.error('newEvent',e); if(fab) fab.style.opacity=''; }
 }
 
 function openEvent(id){
