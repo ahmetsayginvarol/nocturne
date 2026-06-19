@@ -495,15 +495,19 @@ function bc(s){return({draft:'b-draft',confirmed:'b-confirmed',active:'b-active'
 
 // ── EVENTS CRUD ──
 async function createEvent(){
-  const id = db.ref().push().key;
-  const p  = st.prefs;
-  await db.ref(`${ROOT}/events/${id}`).set({
-    date:new Date().toISOString().slice(0,10),
-    name:'Frescobaldi Grand Tuscan Dining',
-    status:'draft', time:p.defaultTime||'18:00',
-    notes:'', createdAt:Date.now(), createdBy:DID,
-  });
-  openEvent(id);
+  try{
+    const id = db.ref().push().key;
+    const p  = st.prefs;
+    const ev = {
+      date:new Date().toISOString().slice(0,10),
+      name:'Frescobaldi Grand Tuscan Dining',
+      status:'draft', time:p.defaultTime||'18:00',
+      notes:'', createdAt:Date.now(), createdBy:DID,
+    };
+    await db.ref(`${ROOT}/events/${id}`).set(ev);
+    st.events[id] = ev;
+    openEvent(id);
+  } catch(e){ toast('Could not create event: '+e.message,'err'); }
 }
 
 function openEvent(id){
