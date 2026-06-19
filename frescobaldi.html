@@ -495,8 +495,10 @@ function bc(s){return({draft:'b-draft',confirmed:'b-confirmed',active:'b-active'
 
 // ── EVENTS CRUD ──
 async function createEvent(){
+  toast('Creating event…');
   try{
     const id = db.ref().push().key;
+    if(!id){ toast('ERROR: could not generate key','err'); return; }
     const p  = st.prefs;
     const ev = {
       date:new Date().toISOString().slice(0,10),
@@ -504,10 +506,12 @@ async function createEvent(){
       status:'draft', time:p.defaultTime||'18:00',
       notes:'', createdAt:Date.now(), createdBy:DID,
     };
+    toast('Saving to database…');
     await db.ref(`${ROOT}/events/${id}`).set(ev);
     st.events[id] = ev;
+    toast('Opening event…','ok');
     openEvent(id);
-  } catch(e){ toast('Could not create event: '+e.message,'err'); }
+  } catch(e){ toast('ERROR: '+e.message,'err'); console.error('createEvent',e); }
 }
 
 function openEvent(id){
