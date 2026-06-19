@@ -444,29 +444,53 @@ const TABLE_CAPS = {
   29:4,30:4,31:4
 };
 
-function getAdjacentEmpty(tid, maxDist=15){
-  const pos={...DOTS_DEFAULT[tid],...(st.dots[tid]||{})};
-  const adj=[];
-  for(let i=1;i<=31;i++){
-    if(i===tid) continue;
-    if(Object.values(st.seating||{}).some(r=>r.tableId===i)) continue;
-    const p={...DOTS_DEFAULT[i],...(st.dots[i]||{})};
-    if(Math.hypot(p.x-pos.x,p.y-pos.y)<=maxDist) adj.push(i);
+// Returns empty tables sorted nearest-first, excluding occupied + absorbed + the source table.
+// "Occupied" means: directly seated, OR absorbed into another seating's combinedWith.
+function nearbyAvailable(tid){
+  const occupied=new Set();
+  for(const rec of Object.values(st.seating||{})){
+    if(rec.tableId) occupied.add(rec.tableId);
+    if(rec.combinedWith) rec.combinedWith.forEach(id=>occupied.add(id));
   }
-  return adj;
+  const pos0={...DOTS_DEFAULT[tid],...(st.dots[tid]||{})};
+  const rows=[];
+  for(let i=1;i<=31;i++){
+    if(i===tid||occupied.has(i)) continue;
+    const p={...DOTS_DEFAULT[i],...(st.dots[i]||{})};
+    rows.push({id:i, dist:Math.hypot(p.x-pos0.x, p.y-pos0.y)});
+  }
+  rows.sort((a,b)=>a.dist-b.dist);
+  // Cap at ~22% distance — avoids suggesting tables across the room
+  return rows.filter(r=>r.dist<=22);
 }
 
+// Returns the combo array [tableId, ...] needed alongside `tid` to seat `partySize`,
+// null if tid already fits, false if no valid combo exists nearby.
 function findCombine(tid, partySize){
   const cap=TABLE_CAPS[tid]||4;
   if(cap>=partySize) return null;
-  const adj=getAdjacentEmpty(tid);
-  for(const a of adj){
-    if(cap+TABLE_CAPS[a]>=partySize) return [a];
+  const needed=partySize-cap;
+  const avail=nearbyAvailable(tid);
+  if(!avail.length) return false;
+
+  // Single-table solution: among those that cover the deficit,
+  // prefer best fit (smallest cap = least waste), break ties by proximity.
+  const singles=avail.filter(t=>TABLE_CAPS[t.id]>=needed);
+  if(singles.length){
+    singles.sort((a,b)=>TABLE_CAPS[a.id]-TABLE_CAPS[b.id]||a.dist-b.dist);
+    return [singles[0].id];
   }
-  for(let a=0;a<adj.length;a++) for(let b=a+1;b<adj.length;b++){
-    if(cap+TABLE_CAPS[adj[a]]+TABLE_CAPS[adj[b]]>=partySize) return [adj[a],adj[b]];
+
+  // Two-table solution: try all nearby pairs, pick the one with
+  // smallest combined distance from the primary table.
+  let bestPair=null, bestDist=Infinity;
+  for(let a=0;a<avail.length;a++) for(let b=a+1;b<avail.length;b++){
+    if(TABLE_CAPS[avail[a].id]+TABLE_CAPS[avail[b].id]>=needed){
+      const d=avail[a].dist+avail[b].dist;
+      if(d<bestDist){bestDist=d;bestPair=[avail[a].id,avail[b].id];}
+    }
   }
-  return false;
+  return bestPair||false;
 }
 
 // ── DOT DEFAULTS (x%, y% from top-left of 1228×1466 map) ──
