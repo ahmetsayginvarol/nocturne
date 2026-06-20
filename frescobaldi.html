@@ -1199,57 +1199,120 @@ async function generateZip(){
 }
 
 function buildLetters(jsPDF,guests,ev){
-  const doc=new jsPDF({unit:'pt',format:'letter'});
-  const PW=doc.internal.pageSize.getWidth(),ML=72,MR=PW-72;
-  const INK=[22,28,38],GOLD=[176,141,56],GRAY=[100,100,100];
+  const doc=new jsPDF({unit:’pt’,format:’letter’});
+  const PW=612,PH=792,ML=72,MR=540,CW=468;
+  const INK=[22,28,38],GRAY=[120,120,120],GOLD=[176,141,56];
   const p=st.prefs;
-  const venue    = p.venue    ||"Sabatini's Italian Trattoria";
-  const location = p.location || 'Deck 8 aft';
-  const director = p.director || 'Your Food & Beverage Director';
-  const price    = p.price    || 99;
-  const tax      = p.tax      || 20;
-  const dress    = p.dress    || 'smart casual';
+  const price=p.price||99, tax=p.tax||20;
+  const director=p.director||’Peter Priestley’;
 
-  guests.forEach((r,i)=>{
-    if(i>0) doc.addPage();
-    // Logos
-    try{doc.addImage(LOGO_P,'PNG',ML,36,76,54);}catch(e){}
-    try{doc.addImage(LOGO_S,'PNG',MR-128,44,128,45);}catch(e){}
-    try{doc.addImage(LOGO_C,'PNG',PW/2-22,42,44,22);}catch(e){}
-    // Rule
-    doc.setDrawColor(...GOLD).setLineWidth(0.75).line(ML,104,MR,104);
-    // Date + stateroom
-    doc.setFont('helvetica','normal').setFontSize(11).setTextColor(...INK);
-    doc.text(ev.date?fmtDateLong(ev.date):'', ML, 128);
-    doc.text('Stateroom: '+(r.stateroom||''), ML, 143);
-    // Greeting
-    doc.setFont('helvetica','bold').setFontSize(12);
-    doc.text('Dear '+(r.name||'Guest'), ML, 170);
-    // Body
-    doc.setFont('times','normal').setFontSize(11).setTextColor(...INK);
-    const eDate=ev.date?fmtDateFull(ev.date):'_____';
-    const eTime=fmtTime12(ev.time||'18:00');
-    const p1=`Thank you for your interest in the Frescobaldi Grand Tuscan Dining Experience. We are pleased to welcome you to an exceptional culinary journey that showcases the rich and vibrant flavors of Tuscany. Our chefs at Sabatini’s℠ Italian Trattoria, along with the Frescobaldi culinary team, have thoughtfully curated an authentic Tuscan menu that pairs perfectly with Frescobaldi’s renowned wines.`;
-    const p2=`Join us on ${eDate} at ${eTime} at ${venue} on ${location}. Our team will be there to escort you and your guests to your table. An event like these calls for a ${dress} dress code – refined yet comfortable. And don’t forget to bring your appetite.`;
-    const w1=doc.splitTextToSize(p1,MR-ML);
-    doc.text(w1,ML,198);
-    const y2=198+w1.length*14+8;
-    const w2=doc.splitTextToSize(p2,MR-ML);
-    doc.text(w2,ML,y2);
-    // Signature
-    const ySig=y2+w2.length*14+18;
-    doc.setFont('times','italic').setFontSize(11).setTextColor(...GRAY);
-    doc.text("It’s love at first bite on Princess,",ML,ySig);
-    doc.setFont('times','normal').setTextColor(...INK);
-    doc.text(director,ML,ySig+15);
-    doc.text('Food & Beverage Directors, Sun Princess®',ML,ySig+29);
-    // Rule
-    doc.setDrawColor(...GOLD).line(ML,ySig+46,MR,ySig+46);
-    // Folio + cancellation
-    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...GRAY);
-    doc.text(doc.splitTextToSize(`Due to the event’s exclusivity, a $${price} fee + ${tax}% gratuity will be charged to your folio.`,MR-ML),ML,ySig+62);
-    doc.text(doc.splitTextToSize(`Cancellation Policy: a fee of 50% of the cover charge will be applied to your folio if your reservation is canceled less than 24 hours prior to the scheduled experience. Should you have any allergy or dietary needs or any questions or special requests, please call the Dine Line.`,MR-ML),ML,ySig+86);
+  // Group reservations by stateroom → one letter per stateroom
+  const srMap={};
+  for(const r of guests){
+    const sr=r.stateroom||’_’;
+    if(!srMap[sr]) srMap[sr]=[];
+    srMap[sr].push(r);
+  }
+
+  function salutation(group){
+    if(group.length===1) return ‘Dear ‘+(group[0].name||’Guest’);
+    const[g0,g1]=group;
+    const ln0=(g0.lastName||’’).toUpperCase();
+    const ln1=(g1.lastName||’’).toUpperCase();
+    if(ln0&&ln1&&ln0===ln1){
+      // Same last name: "Dear Mr. & Mrs. Brown"
+      const t0=g0.name.split(‘ ‘)[0]||’Mr.’;
+      const t1=g1.name.split(‘ ‘)[0]||’Mrs.’;
+      const last=g0.name.split(‘ ‘).slice(1).join(‘ ‘);
+      return `Dear ${t0} & ${t1} ${last}`;
+    }
+    // Different last names: "Dear Ms. Johnson & Mr. Smith"
+    const names=group.map(g=>g.name||’Guest’);
+    return ‘Dear ‘+(names.length===2?names.join(‘ & ‘):names.slice(0,-1).join(‘, ‘)+’ & ‘+names[names.length-1]);
+  }
+
+  Object.values(srMap).forEach((group,gi)=>{
+    if(gi>0) doc.addPage();
+    const r=group[0];
+
+    // ── Frescobaldi logo (LOGO_S, 2.19"×0.78") centered at top ──
+    const lsW=157.7,lsH=56.2;
+    try{doc.addImage(LOGO_S,’PNG’,PW/2-lsW/2,72,lsW,lsH);}catch(e){}
+
+    // Gold rules around small crest element
+    doc.setDrawColor(...GOLD).setLineWidth(0.5);
+    doc.line(ML,134,PW/2-20,134); doc.line(PW/2+20,134,MR,134);
+
+    // Small crest (LOGO_C, 0.37"×0.18") centered between rules
+    const lcW=26.6,lcH=13;
+    try{doc.addImage(LOGO_C,’PNG’,PW/2-lcW/2,138,lcW,lcH);}catch(e){}
+
+    // Full-width gold rule below crest
+    doc.line(ML,157,MR,157);
+
+    // ── Date ──
+    doc.setFont(‘helvetica’,’normal’).setFontSize(10).setTextColor(...INK);
+    doc.text(ev.date?fmtDateLong(ev.date):’’,ML,175);
+
+    // ── Stateroom (bold) ──
+    doc.setFont(‘helvetica’,’bold’);
+    doc.text(‘Stateroom: ‘+(r.stateroom||’’),ML,189);
+
+    // ── Salutation ──
+    doc.setFont(‘helvetica’,’normal’).setFontSize(11);
+    doc.text(salutation(group),ML,211);
+
+    // ── Body text ──
+    const LH=13.5;
+    let y=231;
+    const eDate=ev.date?fmtDateFull(ev.date):’_____’;
+    const eTime=fmtTime12(ev.time||’18:00’);
+
+    // Para 1 — normal, justified
+    doc.setFont(‘times’,’normal’).setFontSize(10).setTextColor(...INK);
+    const p1="Thank you for your interest in the Frescobaldi Grand Tuscan Dining Experience. We are pleased to welcome you to an exceptional culinary journey that showcases the rich and vibrant flavors of Tuscany. Our chefs at Sabatini’s℠ Italian Trattoria, along with the Frescobaldi culinary team, have thoughtfully curated an authentic Tuscan menu that pairs perfectly with Frescobaldi’s renowned wines.";
+    const w1=doc.splitTextToSize(p1,CW);
+    doc.text(w1,ML,y); y+=w1.length*LH+8;
+
+    // Para 2a — bold "Join us on [date] at [time]..."
+    doc.setFont(‘times’,’bold’);
+    const joinBold=`Join us on ${eDate} at ${eTime} at Sabatini’s Italian Trattoria on Deck 8 aft.`;
+    const w2a=doc.splitTextToSize(joinBold,CW);
+    doc.text(w2a,ML,y); y+=w2a.length*LH;
+
+    // Para 2b — normal continuation
+    doc.setFont(‘times’,’normal’);
+    const w2b=doc.splitTextToSize(‘Our team will be there to escort you and your guests to your table.’,CW);
+    doc.text(w2b,ML,y); y+=w2b.length*LH+8;
+
+    // Para 3 — dress code, normal
+    const p3=’An event like these calls for a smart casual dress code – refined yet comfortable. And don’t forget to bring your appetite.’;
+    const w3=doc.splitTextToSize(p3,CW);
+    doc.text(w3,ML,y); y+=w3.length*LH+22;
+
+    // ── Signature (right-aligned) ──
+    doc.setFont(‘times’,’italic’).setFontSize(11).setTextColor(...GRAY);
+    doc.text("It’s love at first bite on Princess,",MR,y,{align:’right’}); y+=16;
+    doc.setFont(‘times’,’normal’).setTextColor(...INK);
+    doc.text(director,MR,y,{align:’right’}); y+=14;
+    doc.text(‘Food & Beverage Directors, Sun Princess®’,MR,y,{align:’right’}); y+=26;
+
+    // Gold rule
+    doc.setDrawColor(...GOLD).setLineWidth(0.5).line(ML,y,MR,y); y+=14;
+
+    // ── Folio & cancellation (small grey text) ──
+    doc.setFont(‘helvetica’,’normal’).setFontSize(8.5).setTextColor(...GRAY);
+    const folio=`Due to the event’s exclusivity, a $${price} fee + ${tax}% gratuity will be charged to your folio.`;
+    const wf=doc.splitTextToSize(folio,CW);
+    doc.text(wf,ML,y); y+=wf.length*11+6;
+    const cancel=’Cancellation Policy: a fee of 50% of the cover charge will be applied to your folio if your reservation is canceled less than 24 hours prior to the scheduled experience. Should you have any allergy or dietary needs or any questions or special requests, please call the Dine Line.’;
+    doc.text(doc.splitTextToSize(cancel,CW),ML,y);
+
+    // ── Princess crest (LOGO_P, 0.63"×0.44") bottom center ──
+    const lpW=45.4,lpH=31.7;
+    try{doc.addImage(LOGO_P,’PNG’,PW/2-lpW/2,PH-54-lpH,lpW,lpH);}catch(e){}
   });
+
   return doc;
 }
 
