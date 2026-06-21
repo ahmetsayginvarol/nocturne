@@ -1363,7 +1363,7 @@ function buildLetters(jsPDF,guests,ev){
     const lsW=100,lsH=74;
     try{doc.addImage(LOGO_S,'JPEG',PW/2-lsW/2,72,lsW,lsH);}catch(e){}
     const lcW=90,lcH=50;
-    try{doc.addImage(LOGO_C,'JPEG',PW/2-lcW/2,72+lsH+10,lcW,lcH);}catch(e){}
+    try{doc.addImage(LOGO_C,'JPEG',PW/2-lcW/2,72+lsH+4,lcW,lcH);}catch(e){}
 
     // ── Date at 3" (216pt) with superscript ordinal ──
     doc.setFont('helvetica','normal').setFontSize(11).setTextColor(...INK);
@@ -1383,7 +1383,7 @@ function buildLetters(jsPDF,guests,ev){
     doc.text('Dear    '+salutation(group),ML,y);
 
     // ── Body paragraphs ──
-    const LH=14;
+    const LH=17;
     y=280;
     const dp2=ordParts(ev.date);
     const inlineDate=`${dp2.monthDay}${dp2.ord}`;
