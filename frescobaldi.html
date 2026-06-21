@@ -1393,7 +1393,7 @@ function buildLetters(jsPDF,guests,ev){
     doc.setFont('helvetica','normal').setFontSize(10).setTextColor(...INK);
     const p1="Thank you for your interest in the Frescobaldi Grand Tuscan Dining Experience. We are pleased to welcome you to an exceptional culinary journey that showcases the rich and vibrant flavors of Tuscany. Our chefs at Sabatini's Italian Trattoria, along with the Frescobaldi culinary team, have thoughtfully curated an authentic Tuscan menu that pairs perfectly with Frescobaldi's renowned wines.";
     const w1=doc.splitTextToSize(p1,CW);
-    doc.text(w1,ML,y,{align:'justify',maxWidth:CW}); y+=w1.length*LH+6;
+    doc.text(w1,ML,y,{align:'justify',maxWidth:CW}); y+=w1.length*LH+16;
 
     // Para 2a — bold opening, Para 2b — normal continuation
     doc.setFont('helvetica','bold');
@@ -1420,12 +1420,12 @@ function buildLetters(jsPDF,guests,ev){
     doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
     const folio=`Due to the event's exclusivity, a $${price} fee + ${tax}% gratuity will be charged to your folio.`;
     const wf=doc.splitTextToSize(folio,CW);
-    doc.text(wf,ML,y,{align:'justify',maxWidth:CW}); y+=wf.length*12+4;
+    doc.text(wf,ML,y,{align:'justify',maxWidth:CW}); y+=wf.length*12+14;
     const cancel="Cancellation Policy: a fee of 50% of the cover charge will be applied to your folio if your reservation is canceled less than 24 hours prior to the scheduled experience. Should you have any allergy or dietary needs or any questions or special requests, please call the Dine Line.";
     doc.text(doc.splitTextToSize(cancel,CW),ML,y,{align:'justify',maxWidth:CW});
 
     // ── Princess crest bottom center ──
-    const lpW=45.4,lpH=31.8;
+    const lpW=117.4,lpH=82.3;
     try{doc.addImage(LOGO_P,'PNG',PW/2-lpW/2,PH-54-lpH,lpW,lpH);}catch(e){}
   });
 
