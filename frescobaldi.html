@@ -105,6 +105,28 @@ select.em-input{cursor:pointer}
 
 /* modals */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:200;padding:16px}
+/* guest add/edit bottom drawer */
+.gm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center;z-index:200}
+.gm-overlay.open{display:flex}
+.gm-sheet{background:linear-gradient(170deg,rgba(14,21,38,.99),rgba(8,13,24,.99));border:1px solid var(--b2);border-top:2px solid var(--gold);border-radius:20px 20px 0 0;width:100%;max-width:640px;padding:20px 22px 36px;max-height:92vh;overflow-y:auto}
+.gm-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.gm-head h3{font-family:'Cinzel',serif;font-size:12px;color:var(--gold2);letter-spacing:2px}
+.gm-row{margin-bottom:15px}
+.gm-lbl{font-size:8.5px;letter-spacing:1.8px;color:var(--dim);text-transform:uppercase;margin-bottom:7px}
+.gm-input{width:100%;background:rgba(23,32,53,.55);border:1px solid var(--b2);border-radius:10px;color:var(--text);font-family:inherit;font-size:15px;padding:13px 14px;outline:none;transition:border-color .18s;box-sizing:border-box}
+.gm-input:focus{border-color:var(--gold)}
+.title-chips{display:flex;gap:8px;flex-wrap:wrap}
+.title-chip{background:rgba(23,32,53,.55);border:1px solid var(--b2);border-radius:8px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:13px;padding:9px 18px;transition:all .15s;user-select:none}
+.title-chip.sel{background:rgba(201,168,76,.14);border-color:var(--gold);color:var(--gold2)}
+.party-row{display:flex;align-items:center;gap:0;background:rgba(23,32,53,.55);border:1px solid var(--b2);border-radius:10px;overflow:hidden;width:fit-content}
+.ps-btn{background:none;border:none;color:var(--text);cursor:pointer;font-size:22px;line-height:1;padding:10px 22px;transition:background .14s}
+.ps-btn:hover{background:rgba(201,168,76,.1)}
+.ps-val{color:var(--text);font-size:16px;font-weight:600;padding:0 22px;min-width:48px;text-align:center}
+.gm-foot{display:flex;gap:10px;margin-top:22px}
+.gm-save{flex:1;background:linear-gradient(135deg,var(--gold),#b8922e);border:none;border-radius:10px;color:#1a0a00;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:1.5px;padding:15px}
+.gm-cancel{background:rgba(23,32,53,.55);border:1px solid var(--b2);border-radius:10px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:11px;padding:15px 22px}
+.row-edit-btn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;padding:3px 6px;border-radius:4px;transition:color .12s}
+.row-edit-btn:hover{color:var(--gold2)}
 .modal-overlay.open{display:flex}
 .modal{background:linear-gradient(160deg,rgba(14,21,38,.98),rgba(8,13,24,.98));border:1px solid var(--b2);border-radius:18px;width:100%;max-width:740px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.65)}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
@@ -369,6 +391,53 @@ select.em-input{cursor:pointer}
         <button class="tb-btn" onclick="goCalibrate()" style="width:100%;padding:10px;letter-spacing:1px;font-size:10px">⚙ CALIBRATE TABLE POSITIONS</button>
       </div>
       <button class="save-btn" onclick="savePrefs()">SAVE SETTINGS</button>
+    </div>
+  </div>
+</div>
+
+<!-- Guest add / edit drawer -->
+<div class="gm-overlay" id="guest-modal" onclick="if(event.target===this)closeGuestForm()">
+  <div class="gm-sheet">
+    <div class="gm-head">
+      <h3 id="gm-head-title">ADD GUEST</h3>
+      <button class="modal-close" onclick="closeGuestForm()">✕</button>
+    </div>
+    <div class="gm-row">
+      <div class="gm-lbl">Title</div>
+      <div class="title-chips" id="title-chips">
+        <button class="title-chip" onclick="selTitle(this,'Mr.')">Mr.</button>
+        <button class="title-chip" onclick="selTitle(this,'Mrs.')">Mrs.</button>
+        <button class="title-chip" onclick="selTitle(this,'Ms.')">Ms.</button>
+        <button class="title-chip" onclick="selTitle(this,'Dr.')">Dr.</button>
+      </div>
+    </div>
+    <div class="gm-row">
+      <div class="gm-lbl">Last Name</div>
+      <input class="gm-input" id="gf-lastname" type="text" placeholder="e.g. Edwards" autocomplete="off" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="gm-row">
+      <div class="gm-lbl">Stateroom</div>
+      <input class="gm-input" id="gf-stateroom" type="text" inputmode="numeric" placeholder="e.g. 6406" autocomplete="off">
+    </div>
+    <div class="gm-row">
+      <div class="gm-lbl">Party Size</div>
+      <div class="party-row">
+        <button class="ps-btn" onclick="adjParty(-1)">−</button>
+        <div class="ps-val" id="gf-party">1</div>
+        <button class="ps-btn" onclick="adjParty(1)">+</button>
+      </div>
+    </div>
+    <div class="gm-row">
+      <div class="gm-lbl">Dietary Needs</div>
+      <input class="gm-input" id="gf-dietary" type="text" placeholder="Allergies, preferences…" autocomplete="off">
+    </div>
+    <div class="gm-row">
+      <div class="gm-lbl">Notes</div>
+      <input class="gm-input" id="gf-notes" type="text" placeholder="Optional note" autocomplete="off">
+    </div>
+    <div class="gm-foot">
+      <button class="gm-cancel" onclick="closeGuestForm()">CANCEL</button>
+      <button class="gm-save" onclick="saveGuestForm()">SAVE GUEST</button>
     </div>
   </div>
 </div>
@@ -819,27 +888,16 @@ function renderResTable(){
     const dot = st.seating[id]?.tableId;
     return `<tr data-id="${id}">
       <td style="color:var(--dim);font-size:10px">${i+1}</td>
-      <td><span class="seated-dot ${dot?'yes':'no'}"></span><input class="cell-edit" value="${esc(r.name||'')}" data-id="${id}" data-f="name" onblur="saveField(this)" onkeydown="ck(event,this)"></td>
-      <td><input class="cell-edit" value="${esc(r.stateroom||'')}" data-id="${id}" data-f="stateroom" onblur="saveField(this)" onkeydown="ck(event,this)" style="max-width:88px"></td>
+      <td style="cursor:pointer" onclick="openGuestForm('${id}')"><span class="seated-dot ${dot?'yes':'no'}"></span>${esc(r.name||'—')}</td>
+      <td style="color:var(--mid);cursor:pointer" onclick="openGuestForm('${id}')">${esc(r.stateroom||'—')}</td>
       <td style="text-align:center;color:var(--mid)">${r.partySize||1}</td>
-      <td><input class="cell-edit" value="${esc(r.dietary||'')}" data-id="${id}" data-f="dietary" placeholder="—" onblur="saveField(this)" onkeydown="ck(event,this)"></td>
-      <td><input class="cell-edit" value="${esc(r.notes||'')}" data-id="${id}" data-f="notes" placeholder="—" onblur="saveField(this)" onkeydown="ck(event,this)"></td>
-      <td><button class="del-btn" onclick="delRes('${id}')">✕</button></td>
+      <td><input class="cell-edit" value="${esc(r.dietary||'')}" data-id="${id}" data-f="dietary" placeholder="—" onblur="saveField(this)"></td>
+      <td><input class="cell-edit" value="${esc(r.notes||'')}" data-id="${id}" data-f="notes" placeholder="—" onblur="saveField(this)"></td>
+      <td style="display:flex;gap:2px"><button class="row-edit-btn" onclick="openGuestForm('${id}')">✎</button><button class="del-btn" onclick="delRes('${id}')">✕</button></td>
     </tr>`;
-  }).join('')+`<tr><td colspan="7"><button class="add-row-btn" onclick="addGuestRow()">+ Add Guest</button></td></tr>`;
+  }).join('')+`<tr><td colspan="7"><button class="add-row-btn" onclick="openGuestForm()">+ ADD GUEST</button></td></tr>`;
 }
 
-function ck(e,inp){
-  if(e.key==='Tab'){
-    e.preventDefault();
-    const row=inp.closest('tr');
-    const ins=[...row.querySelectorAll('.cell-edit')];
-    const idx=ins.indexOf(inp);
-    if(idx<ins.length-1) ins[idx+1].focus();
-    else{const nr=row.nextElementSibling;if(nr&&nr.querySelector('.add-row-btn'))addGuestRow();else nr?.querySelector('.cell-edit')?.focus();}
-  }
-  if(e.key==='Enter'){inp.blur();const nr=inp.closest('tr').nextElementSibling;if(nr&&nr.querySelector('.add-row-btn'))addGuestRow();else nr?.querySelector('.cell-edit')?.focus();}
-}
 
 const _fq={};
 function saveField(inp){
@@ -855,16 +913,72 @@ function saveField(inp){
   },400);
 }
 
-async function addGuestRow(){
+let _gfId=null,_gfParty=1,_gfTitle='';
+
+function openGuestForm(id=null){
+  _gfId=id; _gfTitle=''; _gfParty=1;
+  document.getElementById('gm-head-title').textContent=id?'EDIT GUEST':'ADD GUEST';
+  document.querySelectorAll('.title-chip').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('gf-lastname').value='';
+  document.getElementById('gf-stateroom').value='';
+  document.getElementById('gf-dietary').value='';
+  document.getElementById('gf-notes').value='';
+  document.getElementById('gf-party').textContent='1';
+  if(id){
+    const r=st.reservations[id]||{};
+    const parts=(r.name||'').split(' ');
+    const knownTitles=['Mr.','Mrs.','Ms.','Dr.'];
+    if(knownTitles.includes(parts[0])){
+      _gfTitle=parts[0];
+      document.querySelectorAll('.title-chip').forEach(c=>{if(c.textContent===_gfTitle)c.classList.add('sel');});
+      document.getElementById('gf-lastname').value=parts.slice(1).join(' ')||r.lastName||'';
+    } else {
+      document.getElementById('gf-lastname').value=r.name||r.lastName||'';
+    }
+    document.getElementById('gf-stateroom').value=r.stateroom||'';
+    document.getElementById('gf-dietary').value=r.dietary||'';
+    document.getElementById('gf-notes').value=r.notes||'';
+    _gfParty=r.partySize||1;
+    document.getElementById('gf-party').textContent=_gfParty;
+  }
+  document.getElementById('guest-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('gf-lastname').focus(),160);
+}
+
+function closeGuestForm(){
+  document.getElementById('guest-modal').classList.remove('open');
+  _gfId=null;
+}
+
+function selTitle(el,t){
+  document.querySelectorAll('.title-chip').forEach(c=>c.classList.remove('sel'));
+  if(_gfTitle===t){_gfTitle='';return;}
+  el.classList.add('sel'); _gfTitle=t;
+}
+
+function adjParty(d){
+  _gfParty=Math.max(1,Math.min(20,_gfParty+d));
+  document.getElementById('gf-party').textContent=_gfParty;
+}
+
+async function saveGuestForm(){
   if(!st.currentId) return;
-  const nid=db.ref().push().key;
-  await db.ref(`${ROOT}/events/${st.currentId}/reservations/${nid}`).set({name:'',lastName:'',stateroom:'',partySize:1,dietary:'',notes:'',funding:'',amount:0,serviceCharge:0});
-  setTimeout(()=>{
-    const rows=[...document.querySelectorAll('#guest-tbody tr:not(:last-child)')];
-    const last=rows[rows.length-1];
-    last?.querySelector('.cell-edit')?.focus();
-    last?.scrollIntoView({behavior:'smooth',block:'center'});
-  },150);
+  const raw=document.getElementById('gf-lastname').value.trim();
+  if(!raw){toast('Last name is required','err');return;}
+  const lastName=raw.charAt(0).toUpperCase()+raw.slice(1).toLowerCase();
+  const name=(_gfTitle?_gfTitle+' ':'')+lastName;
+  const rec={
+    name, lastName:raw.toUpperCase(),
+    stateroom:document.getElementById('gf-stateroom').value.trim(),
+    partySize:_gfParty,
+    dietary:document.getElementById('gf-dietary').value.trim(),
+    notes:document.getElementById('gf-notes').value.trim(),
+    funding:'', amount:0, serviceCharge:0
+  };
+  const id=_gfId||db.ref().push().key;
+  await db.ref(`${ROOT}/events/${st.currentId}/reservations/${id}`).set(rec);
+  closeGuestForm();
+  toast((_gfId?'Updated':'Added')+' — '+name,'ok');
 }
 
 async function delRes(id){
