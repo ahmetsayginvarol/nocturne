@@ -1312,15 +1312,32 @@ async function generateZip(){
   btn.disabled=false;
 }
 
+function ordParts(dateStr){
+  const dt=new Date((dateStr||'2026-01-01')+'T12:00:00');
+  const day=dt.getDate();
+  const v=day%100;
+  const ord=(v>=11&&v<=13)?'th':(['th','st','nd','rd'][day%10]||'th');
+  const month=dt.toLocaleDateString('en-US',{month:'long'});
+  return {monthDay:`${month} ${day}`,ord,comma_year:`, ${dt.getFullYear()}`};
+}
+function textWithOrdSup(doc,monthDay,ord,suffix,x,y){
+  const sz=doc.getFontSize();
+  doc.text(monthDay,x,y);
+  const w1=doc.getTextWidth(monthDay);
+  doc.setFontSize(sz*0.65);
+  doc.text(ord,x+w1,y-sz*0.38);
+  const wo=doc.getTextWidth(ord);
+  doc.setFontSize(sz);
+  if(suffix) doc.text(suffix,x+w1+wo,y);
+}
 function buildLetters(jsPDF,guests,ev){
   const doc=new jsPDF({unit:'pt',format:'letter'});
   const PW=612,PH=792,ML=72,MR=540,CW=468;
-  const INK=[22,28,38],GRAY=[120,120,120],GOLD=[176,141,56];
+  const INK=[22,28,38];
   const p=st.prefs;
-  const price=p.price||99, tax=p.tax||20;
+  const price=p.price||99,tax=p.tax||20;
   const director=p.director||'Peter Priestley';
 
-  // Group reservations by stateroom → one letter per stateroom
   const srMap={};
   for(const r of guests){
     const sr=r.stateroom||'_';
@@ -1329,100 +1346,88 @@ function buildLetters(jsPDF,guests,ev){
   }
 
   function salutation(group){
-    if(group.length===1) return 'Dear '+(group[0].name||'Guest');
+    if(group.length===1) return group[0].name||'Guest';
     const[g0,g1]=group;
-    const ln0=(g0.lastName||'').toUpperCase();
-    const ln1=(g1.lastName||'').toUpperCase();
+    const ln0=(g0.lastName||'').toUpperCase(),ln1=(g1.lastName||'').toUpperCase();
     if(ln0&&ln1&&ln0===ln1){
-      // Same last name: "Dear Mr. & Mrs. Brown"
-      const t0=g0.name.split(' ')[0]||'Mr.';
-      const t1=g1.name.split(' ')[0]||'Mrs.';
+      const t0=g0.name.split(' ')[0]||'Mr.',t1=g1.name.split(' ')[0]||'Mrs.';
       const last=g0.name.split(' ').slice(1).join(' ');
-      return `Dear ${t0} & ${t1} ${last}`;
+      return `${t0} & ${t1} ${last}`;
     }
-    // Different last names: "Dear Ms. Johnson & Mr. Smith"
     const names=group.map(g=>g.name||'Guest');
-    return 'Dear '+(names.length===2?names.join(' & '):names.slice(0,-1).join(', ')+' & '+names[names.length-1]);
+    return names.length===2?names.join(' & '):names.slice(0,-1).join(', ')+' & '+names[names.length-1];
   }
 
   Object.values(srMap).forEach((group,gi)=>{
     if(gi>0) doc.addPage();
     const r=group[0];
 
-    // ── Frescobaldi logo (LOGO_S, 2.19"×0.78") centered at top ──
+    // ── Header: Sabatini's logo + Frescobaldi Toscana logo, stacked, no rules ──
     const lsW=157.7,lsH=56.2;
     try{doc.addImage(LOGO_S,'PNG',PW/2-lsW/2,72,lsW,lsH);}catch(e){}
+    const lcW=86,lcH=55;
+    try{doc.addImage(LOGO_C,'PNG',PW/2-lcW/2,72+lsH+16,lcW,lcH);}catch(e){}
 
-    // Gold rules around small crest element
-    doc.setDrawColor(...GOLD).setLineWidth(0.5);
-    doc.line(ML,134,PW/2-20,134); doc.line(PW/2+20,134,MR,134);
+    // ── Date at 3" (216pt) with superscript ordinal ──
+    doc.setFont('helvetica','normal').setFontSize(11).setTextColor(...INK);
+    const dp=ordParts(ev.date);
+    textWithOrdSup(doc,dp.monthDay,dp.ord,dp.comma_year,ML,216);
 
-    // Small crest (LOGO_C, 0.37"×0.18") centered between rules
-    const lcW=26.6,lcH=13;
-    try{doc.addImage(LOGO_C,'PNG',PW/2-lcW/2,138,lcW,lcH);}catch(e){}
-
-    // Full-width gold rule below crest
-    doc.line(ML,157,MR,157);
-
-    // ── Date ──
-    doc.setFont('helvetica','normal').setFontSize(10).setTextColor(...INK);
-    doc.text(ev.date?fmtDateLong(ev.date):'',ML,175);
-
-    // ── Stateroom (bold) ──
+    // ── Stateroom: label normal weight, number bold ──
+    let y=234;
+    doc.setFont('helvetica','normal').setFontSize(11);
+    doc.text('Stateroom: ',ML,y);
     doc.setFont('helvetica','bold');
-    doc.text('Stateroom: '+(r.stateroom||''),ML,189);
+    doc.text(r.stateroom||'',ML+doc.getTextWidth('Stateroom: '),y);
 
     // ── Salutation ──
-    doc.setFont('helvetica','normal').setFontSize(11);
-    doc.text(salutation(group),ML,211);
+    y=252;
+    doc.setFont('helvetica','normal');
+    doc.text('Dear    '+salutation(group),ML,y);
 
-    // ── Body text ──
-    const LH=13.5;
-    let y=231;
-    const eDate=ev.date?fmtDateFull(ev.date):'_____';
+    // ── Body paragraphs ──
+    const LH=14;
+    y=280;
+    const dp2=ordParts(ev.date);
+    const inlineDate=`${dp2.monthDay}${dp2.ord}`;
     const eTime=fmtTime12(ev.time||'18:00');
 
-    // Para 1 — normal, justified
-    doc.setFont('times','normal').setFontSize(10).setTextColor(...INK);
+    // Para 1 — helvetica, justified
+    doc.setFont('helvetica','normal').setFontSize(10).setTextColor(...INK);
     const p1="Thank you for your interest in the Frescobaldi Grand Tuscan Dining Experience. We are pleased to welcome you to an exceptional culinary journey that showcases the rich and vibrant flavors of Tuscany. Our chefs at Sabatini's℠ Italian Trattoria, along with the Frescobaldi culinary team, have thoughtfully curated an authentic Tuscan menu that pairs perfectly with Frescobaldi's renowned wines.";
     const w1=doc.splitTextToSize(p1,CW);
-    doc.text(w1,ML,y); y+=w1.length*LH+8;
+    doc.text(w1,ML,y,{align:'justify',maxWidth:CW}); y+=w1.length*LH+6;
 
-    // Para 2a — bold "Join us on [date] at [time]..."
-    doc.setFont('times','bold');
-    const joinBold=`Join us on ${eDate} at ${eTime} at Sabatini's Italian Trattoria on Deck 8 aft.`;
+    // Para 2a — bold opening, Para 2b — normal continuation
+    doc.setFont('helvetica','bold');
+    const joinBold=`Join us on ${inlineDate} at ${eTime} at Sabatini's Italian Trattoria on Deck 8 aft.`;
     const w2a=doc.splitTextToSize(joinBold,CW);
-    doc.text(w2a,ML,y); y+=w2a.length*LH;
-
-    // Para 2b — normal continuation
-    doc.setFont('times','normal');
+    doc.text(w2a,ML,y,{align:'justify',maxWidth:CW}); y+=w2a.length*LH;
+    doc.setFont('helvetica','normal');
     const w2b=doc.splitTextToSize('Our team will be there to escort you and your guests to your table.',CW);
-    doc.text(w2b,ML,y); y+=w2b.length*LH+8;
+    doc.text(w2b,ML,y,{align:'justify',maxWidth:CW}); y+=w2b.length*LH+6;
 
-    // Para 3 — dress code, normal
-    const p3=`An event like these calls for a smart casual dress code – refined yet comfortable. And don't forget to bring your appetite.`;
+    // Para 3
+    const p3="An event like these calls for a smart casual dress code – refined yet comfortable. And don't forget to bring your appetite.";
     const w3=doc.splitTextToSize(p3,CW);
-    doc.text(w3,ML,y); y+=w3.length*LH+22;
+    doc.text(w3,ML,y,{align:'justify',maxWidth:CW}); y+=w3.length*LH+22;
 
     // ── Signature (right-aligned) ──
-    doc.setFont('times','italic').setFontSize(11).setTextColor(...GRAY);
+    doc.setFont('helvetica','italic').setFontSize(11);
     doc.text("It's love at first bite on Princess,",MR,y,{align:'right'}); y+=16;
-    doc.setFont('times','normal').setTextColor(...INK);
+    doc.setFont('helvetica','normal');
     doc.text(director,MR,y,{align:'right'}); y+=14;
-    doc.text('Food & Beverage Directors, Sun Princess®',MR,y,{align:'right'}); y+=26;
+    doc.text('Food & Beverage Directors, Sun Princess®',MR,y,{align:'right'}); y+=30;
 
-    // Gold rule
-    doc.setDrawColor(...GOLD).setLineWidth(0.5).line(ML,y,MR,y); y+=14;
-
-    // ── Folio & cancellation (small grey text) ──
-    doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(...GRAY);
+    // ── Footer — no rule, dark ink ──
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
     const folio=`Due to the event's exclusivity, a $${price} fee + ${tax}% gratuity will be charged to your folio.`;
     const wf=doc.splitTextToSize(folio,CW);
-    doc.text(wf,ML,y); y+=wf.length*11+6;
-    const cancel='Cancellation Policy: a fee of 50% of the cover charge will be applied to your folio if your reservation is canceled less than 24 hours prior to the scheduled experience. Should you have any allergy or dietary needs or any questions or special requests, please call the Dine Line.';
-    doc.text(doc.splitTextToSize(cancel,CW),ML,y);
+    doc.text(wf,ML,y,{align:'justify',maxWidth:CW}); y+=wf.length*12+4;
+    const cancel="Cancellation Policy: a fee of 50% of the cover charge will be applied to your folio if your reservation is canceled less than 24 hours prior to the scheduled experience. Should you have any allergy or dietary needs or any questions or special requests, please call the Dine Line.";
+    doc.text(doc.splitTextToSize(cancel,CW),ML,y,{align:'justify',maxWidth:CW});
 
-    // ── Princess crest (LOGO_P, 0.63"×0.44") bottom center ──
+    // ── Princess crest bottom center ──
     const lpW=45.4,lpH=31.7;
     try{doc.addImage(LOGO_P,'PNG',PW/2-lpW/2,PH-54-lpH,lpW,lpH);}catch(e){}
   });
