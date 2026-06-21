@@ -1393,7 +1393,10 @@ function buildLetters(jsPDF,guests,ev){
     doc.setFont('helvetica','normal').setFontSize(10).setTextColor(...INK);
     const p1="Thank you for your interest in the Frescobaldi Grand Tuscan Dining Experience. We are pleased to welcome you to an exceptional culinary journey that showcases the rich and vibrant flavors of Tuscany. Our chefs at Sabatini's Italian Trattoria, along with the Frescobaldi culinary team, have thoughtfully curated an authentic Tuscan menu that pairs perfectly with Frescobaldi's renowned wines.";
     const w1=doc.splitTextToSize(p1,CW);
-    doc.text(w1,ML,y,{align:'justify',maxWidth:CW}); y+=w1.length*LH+16;
+    const P1_ROW=19;
+    for(let i=0;i<w1.length;i++)
+      doc.text(w1[i],ML,y+i*P1_ROW,i<w1.length-1?{align:'justify',maxWidth:CW}:{});
+    y+=w1.length*P1_ROW+6;
 
     // Para 2a — bold opening, Para 2b — normal continuation
     doc.setFont('helvetica','bold');
@@ -1420,9 +1423,12 @@ function buildLetters(jsPDF,guests,ev){
     doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
     const folio=`Due to the event's exclusivity, a $${price} fee + ${tax}% gratuity will be charged to your folio.`;
     const wf=doc.splitTextToSize(folio,CW);
-    doc.text(wf,ML,y,{align:'justify',maxWidth:CW}); y+=wf.length*12+14;
+    doc.text(wf,ML,y,{align:'justify',maxWidth:CW}); y+=wf.length*12+4;
     const cancel="Cancellation Policy: a fee of 50% of the cover charge will be applied to your folio if your reservation is canceled less than 24 hours prior to the scheduled experience. Should you have any allergy or dietary needs or any questions or special requests, please call the Dine Line.";
-    doc.text(doc.splitTextToSize(cancel,CW),ML,y,{align:'justify',maxWidth:CW});
+    const cancelLines=doc.splitTextToSize(cancel,CW);
+    const CANCEL_ROW=15;
+    for(let i=0;i<cancelLines.length;i++)
+      doc.text(cancelLines[i],ML,y+i*CANCEL_ROW,i<cancelLines.length-1?{align:'justify',maxWidth:CW}:{});
 
     // ── Princess crest bottom center ──
     const lpW=117.4,lpH=82.3;
