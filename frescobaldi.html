@@ -290,7 +290,7 @@ select.em-input{cursor:pointer}
     <div class="tab-panel active" id="panel-guests">
       <div class="guest-toolbar">
         <button class="tb-btn" onclick="triggerImport()">⬆ IMPORT CSV</button>
-        <button class="tb-btn" onclick="addGuestRow()">+ ADD GUEST</button>
+        <button class="tb-btn" onclick="openGuestForm()">+ ADD GUEST</button>
         <button class="tb-btn" onclick="exportCSV()">⬇ EXPORT</button>
         <span class="guest-count" id="guest-count">0 guests</span>
       </div>
@@ -306,7 +306,7 @@ select.em-input{cursor:pointer}
             <th style="width:28px"></th>
           </tr></thead>
           <tbody id="guest-tbody">
-            <tr><td colspan="7"><button class="add-row-btn" onclick="addGuestRow()">+ Add Guest</button></td></tr>
+            <tr><td colspan="7"><button class="add-row-btn" onclick="openGuestForm()">+ Add Guest</button></td></tr>
           </tbody>
         </table>
       </div>
