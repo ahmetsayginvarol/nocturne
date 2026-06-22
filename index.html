@@ -919,6 +919,23 @@ body {
 }
 .tm.tm-flash-seat  { animation: tm-pop-seat  0.44s cubic-bezier(.2,.8,.3,1) forwards !important; }
 .tm.tm-flash-reset { animation: tm-pop-reset 0.38s cubic-bezier(.2,.8,.3,1) forwards !important; }
+/* Countdown overlay shown on markers with a pending auto-reset */
+.reset-countdown {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--gold);
+  background: rgba(0,0,0,0.72);
+  border: 1px solid rgba(201,168,76,0.5);
+  border-radius: 3px;
+  padding: 1px 4px;
+  pointer-events: none;
+  letter-spacing: .04em;
+}
 /* ── Table dot intro wave ── */
 @keyframes tm-intro {
   from { transform: translate(-50%,-50%) scale(0); opacity: 0; }
@@ -7570,9 +7587,11 @@ function showInfoModal(id) {
       ${sharingBtn}
       <button class="btn-s" style="flex:1;min-width:90px;" onclick="showEditModal('${id}')">✎ EDIT</button>
       <button class="btn-s" style="flex:1;min-width:90px;" onclick="showMoveModal('${id}')">↗ MOVE</button>
-      ${Date.now() - (tState.seatedAt||0) < 7*60*1000
-        ? `<button class="btn-d" style="flex:1;min-width:90px;border-color:rgba(244,162,97,0.6);color:#f4a261;" onclick="cancelSeatingConfirm('${id}')">↩ CANCEL SEATING</button>`
-        : `<button class="btn-d" style="flex:1;min-width:90px;" onclick="resetTableConfirm('${id}')">RESET</button>`
+      ${_pendingResetTimers[id]
+        ? `<button class="btn-d" style="flex:1;min-width:90px;border-color:rgba(201,168,76,0.5);color:var(--gold);" onclick="_cancelPendingReset('${id}');closeModal();renderAll();">✕ CANCEL TIMER</button>`
+        : Date.now() - (tState.seatedAt||0) < 7*60*1000
+          ? `<button class="btn-d" style="flex:1;min-width:90px;border-color:rgba(244,162,97,0.6);color:#f4a261;" onclick="cancelSeatingConfirm('${id}')">↩ CANCEL SEATING</button>`
+          : `<button class="btn-d" style="flex:1;min-width:90px;" onclick="resetTableConfirm('${id}')">RESET</button>`
       }
       ${combineBtn}
       <button class="btn-s" style="flex:1;min-width:90px;" onclick="closeModal()">CLOSE</button>
@@ -7935,11 +7954,85 @@ function resetTableConfirm(id) {
   const html = `
     <h2>RESET TABLE ${tableLabel}?</h2>
     <div class="m-sub">This will clear the seating for ${group ? 'all combined tables' : 'this table'}.</div>
+    <div style="margin-top:16px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:11px;color:var(--text-dim);letter-spacing:.05em;">RESET IN</span>
+      <button onclick="_adjResetTimer(-1)" style="width:28px;height:28px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);border-radius:4px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+      <span id="reset-timer-val" style="font-size:16px;font-weight:700;color:var(--gold);min-width:52px;text-align:center;">1 min</span>
+      <button onclick="_adjResetTimer(1)" style="width:28px;height:28px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);border-radius:4px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+      <span style="font-size:10px;color:var(--text-dim)">max 15</span>
+    </div>
     <div class="m-btns" style="margin-top:20px">
-      <button class="btn-d" onclick="doResetTable('${id}')">YES, RESET</button>
+      <button class="btn-d" onclick="doResetTable('${id}')">RESET NOW</button>
+      <button class="btn-p" style="background:rgba(201,168,76,0.12);border-color:var(--gold);color:var(--gold);" onclick="scheduleResetTable('${id}')">⏱ RESET IN <span id="reset-timer-btn-val">1 MIN</span></button>
       <button class="btn-s" onclick="closeModal()">CANCEL</button>
     </div>`;
   document.getElementById('modal').innerHTML = html;
+  window._resetTimerMins = 1;
+}
+
+let _pendingResetTimers = {}; // tableId → { timeoutId, endsAt, intervalId }
+
+function _adjResetTimer(delta) {
+  window._resetTimerMins = Math.max(1, Math.min(15, (window._resetTimerMins || 1) + delta));
+  const v = window._resetTimerMins;
+  const el = document.getElementById('reset-timer-val');
+  const el2 = document.getElementById('reset-timer-btn-val');
+  if (el)  el.textContent  = v + ' min';
+  if (el2) el2.textContent = v + ' MIN';
+}
+
+function scheduleResetTable(id) {
+  const mins = window._resetTimerMins || 1;
+  const endsAt = Date.now() + mins * 60 * 1000;
+
+  // Cancel any existing timer for this table
+  _cancelPendingReset(id);
+
+  const intervalId = setInterval(() => _tickResetCountdown(id), 1000);
+  const timeoutId  = setTimeout(() => {
+    clearInterval(intervalId);
+    delete _pendingResetTimers[id];
+    doResetTable(id);
+  }, mins * 60 * 1000);
+
+  _pendingResetTimers[id] = { timeoutId, intervalId, endsAt };
+
+  closeModal();
+  _tickResetCountdown(id); // update marker immediately
+  setStatus('⏱ Table ' + id + ' will auto-reset in ' + mins + ' min');
+}
+
+function _cancelPendingReset(id) {
+  const p = _pendingResetTimers[id];
+  if (!p) return;
+  clearTimeout(p.timeoutId);
+  clearInterval(p.intervalId);
+  delete _pendingResetTimers[id];
+  // Remove the countdown label from the marker
+  document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
+  setStatus('Timer cancelled — table ' + id + ' will not auto-reset');
+}
+
+function _tickResetCountdown(id) {
+  const p = _pendingResetTimers[id];
+  if (!p) return;
+  const secsLeft = Math.max(0, Math.round((p.endsAt - Date.now()) / 1000));
+  const mins = Math.floor(secsLeft / 60);
+  const secs = secsLeft % 60;
+  const label = mins > 0
+    ? mins + ':' + String(secs).padStart(2, '0')
+    : secs + 's';
+  // Update the marker countdown overlay
+  const marker = document.getElementById('tm-' + id);
+  if (marker) {
+    let cd = marker.querySelector('.reset-countdown');
+    if (!cd) {
+      cd = document.createElement('div');
+      cd.className = 'reset-countdown';
+      marker.appendChild(cd);
+    }
+    cd.textContent = '⏱ ' + label;
+  }
 }
 
 function doResetTable(id) {
