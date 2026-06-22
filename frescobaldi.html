@@ -1360,16 +1360,17 @@ function buildLetters(jsPDF,guests,ev){
     const r=group[0];
 
     // ── Header: Sabatini's logo + Frescobaldi Toscana logo, stacked, no rules ──
-    // LOGO_S: 6"×2" = 432×144pt (JPEG white borders invisible on white paper)
-    // LOGO_C: 3" wide = 216pt; height from natural pixel ratio 380×210 → 119pt
-    // LOGO_P: PNG has transparent padding; 1"×1" visual → render 134×133pt
-    const lsW=432,lsH=144;
-    try{doc.addImage(LOGO_S,'JPEG',PW/2-lsW/2,36,lsW,lsH);}catch(e){}
-    const lcW=216,lcH=119;
-    try{doc.addImage(LOGO_C,'JPEG',PW/2-lcW/2,36+lsH+4,lcW,lcH);}catch(e){}
+    // All measurements in cm (1cm = 28.35pt). JPEG white borders invisible on white paper.
+    // LOGO_S: 6cm × 2cm = 170 × 57pt
+    // LOGO_C: 3cm × 2cm = 85  × 57pt
+    // LOGO_P: PNG transparent padding; 1cm visual → render 53×52pt
+    const lsW=170,lsH=57;
+    try{doc.addImage(LOGO_S,'JPEG',PW/2-lsW/2,72,lsW,lsH);}catch(e){}
+    const lcW=85,lcH=57;
+    try{doc.addImage(LOGO_C,'JPEG',PW/2-lcW/2,72+lsH+4,lcW,lcH);}catch(e){}
 
-    // ── Date — follows logo stack bottom ──
-    const headerBottom=36+lsH+4+lcH; // =303pt
+    // ── Date — follows logo stack bottom (~216pt, the original 3" mark) ──
+    const headerBottom=72+lsH+4+lcH; // =190pt
     doc.setFont('helvetica','normal').setFontSize(11).setTextColor(...INK);
     const dp=ordParts(ev.date);
     textWithOrdSup(doc,dp.monthDay,dp.ord,dp.comma_year,ML,headerBottom+22);
@@ -1435,9 +1436,9 @@ function buildLetters(jsPDF,guests,ev){
       doc.text(cancelLines[i],ML,y+i*CANCEL_ROW,i<cancelLines.length-1?{align:'justify',maxWidth:CW}:{});
 
     // ── Princess crest bottom center ──
-    // PNG transparent padding: 1"×1" visual crest → render 134×133pt
-    const lpW=134,lpH=133;
-    try{doc.addImage(LOGO_P,'PNG',PW/2-lpW/2,PH-36-lpH,lpW,lpH);}catch(e){}
+    // PNG transparent padding; 1cm visual crest → render 53×52pt
+    const lpW=53,lpH=52;
+    try{doc.addImage(LOGO_P,'PNG',PW/2-lpW/2,PH-54-lpH,lpW,lpH);}catch(e){}
   });
 
   return doc;
