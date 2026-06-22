@@ -1360,31 +1360,35 @@ function buildLetters(jsPDF,guests,ev){
     const r=group[0];
 
     // ── Header: Sabatini's logo + Frescobaldi Toscana logo, stacked, no rules ──
-    const lsW=100,lsH=74;
-    try{doc.addImage(LOGO_S,'JPEG',PW/2-lsW/2,72,lsW,lsH);}catch(e){}
-    const lcW=90,lcH=50;
-    try{doc.addImage(LOGO_C,'JPEG',PW/2-lcW/2,72+lsH+4,lcW,lcH);}catch(e){}
+    // LOGO_S: 6"×2" = 432×144pt (JPEG white borders invisible on white paper)
+    // LOGO_C: 3" wide = 216pt; height from natural pixel ratio 380×210 → 119pt
+    // LOGO_P: PNG has transparent padding; 1"×1" visual → render 134×133pt
+    const lsW=432,lsH=144;
+    try{doc.addImage(LOGO_S,'JPEG',PW/2-lsW/2,36,lsW,lsH);}catch(e){}
+    const lcW=216,lcH=119;
+    try{doc.addImage(LOGO_C,'JPEG',PW/2-lcW/2,36+lsH+4,lcW,lcH);}catch(e){}
 
-    // ── Date at 3" (216pt) with superscript ordinal ──
+    // ── Date — follows logo stack bottom ──
+    const headerBottom=36+lsH+4+lcH; // =303pt
     doc.setFont('helvetica','normal').setFontSize(11).setTextColor(...INK);
     const dp=ordParts(ev.date);
-    textWithOrdSup(doc,dp.monthDay,dp.ord,dp.comma_year,ML,216);
+    textWithOrdSup(doc,dp.monthDay,dp.ord,dp.comma_year,ML,headerBottom+22);
 
     // ── Stateroom: label normal weight, number bold ──
-    let y=234;
+    let y=headerBottom+40;
     doc.setFont('helvetica','normal').setFontSize(11);
     doc.text('Stateroom: ',ML,y);
     doc.setFont('helvetica','bold');
     doc.text(r.stateroom||'',ML+doc.getTextWidth('Stateroom: '),y);
 
     // ── Salutation ──
-    y=252;
+    y=headerBottom+58;
     doc.setFont('helvetica','normal');
     doc.text('Dear    '+salutation(group),ML,y);
 
     // ── Body paragraphs ──
     const LH=17;
-    y=280;
+    y=headerBottom+80;
     const dp2=ordParts(ev.date);
     const inlineDate=`${dp2.monthDay}${dp2.ord}`;
     const eTime=fmtTime12(ev.time||'18:00');
@@ -1431,8 +1435,9 @@ function buildLetters(jsPDF,guests,ev){
       doc.text(cancelLines[i],ML,y+i*CANCEL_ROW,i<cancelLines.length-1?{align:'justify',maxWidth:CW}:{});
 
     // ── Princess crest bottom center ──
-    const lpW=117.4,lpH=82.3;
-    try{doc.addImage(LOGO_P,'PNG',PW/2-lpW/2,PH-54-lpH,lpW,lpH);}catch(e){}
+    // PNG transparent padding: 1"×1" visual crest → render 134×133pt
+    const lpW=134,lpH=133;
+    try{doc.addImage(LOGO_P,'PNG',PW/2-lpW/2,PH-36-lpH,lpW,lpH);}catch(e){}
   });
 
   return doc;
