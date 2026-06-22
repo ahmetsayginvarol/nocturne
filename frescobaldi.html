@@ -1415,7 +1415,8 @@ function buildLetters(jsPDF,guests,ev){
     doc.setFont('helvetica','normal').setFontSize(10);
     doc.text("It's love at first bite on Princess,",RIGHT,498.4,{align:'right'});
     doc.text(director,RIGHT,514.9,{align:'right'});
-    doc.text('Food & Beverage Directors, Sun Princess®',RIGHT,531.5,{align:'right'});
+    doc.text('Food & Beverage Directors, Sun Princess',RIGHT,531.5,{align:'right'});
+    doc.setFontSize(3); doc.text('®',RIGHT,531.5-6.2); doc.setFontSize(10);
 
     // ── Footer (size 9) — baselines 576.4 / 591.5 / 606.4 / 621.3 ──
     doc.setFontSize(9);
