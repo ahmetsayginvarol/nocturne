@@ -7954,17 +7954,16 @@ function resetTableConfirm(id) {
   const html = `
     <h2>RESET TABLE ${tableLabel}?</h2>
     <div class="m-sub">This will clear the seating for ${group ? 'all combined tables' : 'this table'}.</div>
-    <div style="margin-top:16px;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:11px;color:var(--text-dim);letter-spacing:.05em;">RESET IN</span>
-      <button onclick="_adjResetTimer(-1)" style="width:28px;height:28px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);border-radius:4px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
-      <span id="reset-timer-val" style="font-size:16px;font-weight:700;color:var(--gold);min-width:52px;text-align:center;">1 min</span>
-      <button onclick="_adjResetTimer(1)" style="width:28px;height:28px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);border-radius:4px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
-      <span style="font-size:10px;color:var(--text-dim)">max 15</span>
-    </div>
     <div class="m-btns" style="margin-top:20px">
-      <button class="btn-d" onclick="doResetTable('${id}')">RESET NOW</button>
-      <button class="btn-p" style="background:rgba(201,168,76,0.12);border-color:var(--gold);color:var(--gold);" onclick="scheduleResetTable('${id}')">⏱ RESET IN <span id="reset-timer-btn-val">1 MIN</span></button>
+      <button class="btn-d" onclick="doResetTable('${id}')">YES, RESET</button>
       <button class="btn-s" onclick="closeModal()">CANCEL</button>
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border2);display:flex;align-items:center;gap:8px;justify-content:center;">
+      <span style="font-size:10px;color:var(--text-dim);">auto-reset in</span>
+      <button onclick="_adjResetTimer(-1)" style="width:20px;height:20px;border:1px solid var(--border2);background:transparent;color:var(--text-dim);border-radius:3px;font-size:13px;cursor:pointer;line-height:1;">−</button>
+      <span id="reset-timer-val" style="font-size:11px;font-weight:600;color:var(--text-mid);min-width:36px;text-align:center;">1 min</span>
+      <button onclick="_adjResetTimer(1)" style="width:20px;height:20px;border:1px solid var(--border2);background:transparent;color:var(--text-dim);border-radius:3px;font-size:13px;cursor:pointer;line-height:1;">+</button>
+      <button onclick="scheduleResetTable('${id}')" style="font-size:10px;padding:3px 8px;border:1px solid var(--border2);background:transparent;color:var(--text-dim);border-radius:3px;cursor:pointer;letter-spacing:.04em;">SET TIMER</button>
     </div>`;
   document.getElementById('modal').innerHTML = html;
   window._resetTimerMins = 1;
