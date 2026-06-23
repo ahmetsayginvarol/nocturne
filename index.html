@@ -8039,6 +8039,42 @@ function resetTableConfirm(id) {
 
 let _pendingResetTimers = {}; // tableId → { timeoutId, endsAt, intervalId }
 
+// ── Helpers for Firebase-synced reset timers ─────────────────────────────────
+function _cleanupLocalTimer(id) {
+  const p = _pendingResetTimers[id];
+  if (!p) return;
+  clearTimeout(p.timeoutId);
+  clearInterval(p.intervalId);
+  delete _pendingResetTimers[id];
+  document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
+}
+
+function _startLocalTimerWatch(id, endsAt) {
+  // Cancel any previous local watch for this table
+  _cleanupLocalTimer(id);
+  const remaining = endsAt - Date.now();
+  if (remaining <= 0) return; // already expired — listener will fire reset
+  const intervalId = setInterval(() => _tickResetCountdown(id), 1000);
+  const timeoutId  = setTimeout(() => _fireResetTimer(id), remaining);
+  _pendingResetTimers[id] = { timeoutId, intervalId, endsAt };
+  _tickResetCountdown(id);
+}
+
+function _fireResetTimer(id) {
+  // Transaction ensures only ONE device calls doResetTable
+  const ref = db.ref('eclipse/deck7/resetTimers/' + id);
+  ref.transaction(current => {
+    if (!current || current.claimed) return; // abort — already claimed or removed
+    return Object.assign({}, current, { claimed: true, claimedBy: DEVICE_ID });
+  }, (err, committed) => {
+    _cleanupLocalTimer(id);
+    document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
+    if (!committed) return; // another device claimed it first
+    ref.remove().catch(() => {});
+    doResetTable(id);
+  });
+}
+
 function _adjResetTimer(delta) {
   window._resetTimerMins = Math.max(1, Math.min(15, (window._resetTimerMins || 1) + delta));
   const v = window._resetTimerMins;
@@ -8052,34 +8088,17 @@ function scheduleResetTable(id) {
   const mins = window._resetTimerMins || 1;
   const endsAt = Date.now() + mins * 60 * 1000;
 
-  // Cancel any existing timer for this table
-  _cancelPendingReset(id);
-
-  const intervalId = setInterval(() => _tickResetCountdown(id), 1000);
-  const timeoutId  = setTimeout(() => {
-    clearInterval(intervalId);
-    // Remove badge immediately — doResetTable → renderAll() destroys and
-    // recreates markers, so a badge on the old element would be orphaned.
-    document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
-    delete _pendingResetTimers[id];
-    doResetTable(id);
-  }, mins * 60 * 1000);
-
-  _pendingResetTimers[id] = { timeoutId, intervalId, endsAt };
+  // Write to Firebase — all devices' listener will start the countdown
+  db.ref('eclipse/deck7/resetTimers/' + id).set({ endsAt, setBy: DEVICE_ID }).catch(() => {});
 
   closeModal();
-  _tickResetCountdown(id); // update marker immediately
   setStatus('⏱ Table ' + id + ' will auto-reset in ' + mins + ' min');
 }
 
 function _cancelPendingReset(id) {
-  const p = _pendingResetTimers[id];
-  if (!p) return;
-  clearTimeout(p.timeoutId);
-  clearInterval(p.intervalId);
-  delete _pendingResetTimers[id];
-  // Remove the countdown label from the marker
-  document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
+  // Remove from Firebase — listener on all devices will clean up
+  db.ref('eclipse/deck7/resetTimers/' + id).remove().catch(() => {});
+  _cleanupLocalTimer(id);
   setStatus('Timer cancelled — table ' + id + ' will not auto-reset');
 }
 
@@ -9847,6 +9866,28 @@ function initFirebase() {
         showSeatToast(data.tableId, data.sender, data.covers, data.seating);
       }
     });
+  });
+
+  // ── Reset timer sync listener — all devices see countdowns in realtime ───
+  db.ref('eclipse/deck7/resetTimers').on('value', snap => {
+    const timers = snap.val() || {};
+    // Start/update local watches for active timers
+    Object.keys(timers).forEach(tableId => {
+      const entry = timers[tableId];
+      if (!entry || entry.claimed) return;
+      const existing = _pendingResetTimers[tableId];
+      // Only re-init if not already watching this exact timer
+      if (!existing || existing.endsAt !== entry.endsAt) {
+        _startLocalTimerWatch(tableId, entry.endsAt);
+      }
+    });
+    // Clean up timers that were removed (cancelled or fired)
+    Object.keys(_pendingResetTimers).forEach(tableId => {
+      if (!timers[tableId] || timers[tableId].claimed) {
+        _cleanupLocalTimer(tableId);
+      }
+    });
+    renderAll();
   });
 
   // ── Waiter signal listener ────────────────────────────────────────────────
