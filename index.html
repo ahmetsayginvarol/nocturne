@@ -8066,12 +8066,13 @@ function _fireResetTimer(id) {
   ref.transaction(current => {
     if (!current || current.claimed) return; // abort — already claimed or removed
     return Object.assign({}, current, { claimed: true, claimedBy: DEVICE_ID });
-  }, (err, committed) => {
+  }, (err, committed, snap) => {
     _cleanupLocalTimer(id);
     document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
     if (!committed) return; // another device claimed it first
+    const originalSetter = snap?.val()?.setBy || null;
     ref.remove().catch(() => {});
-    doResetTable(id);
+    doResetTable(id, originalSetter);
   });
 }
 
@@ -8128,7 +8129,7 @@ function _tickResetCountdown(id) {
   }
 }
 
-function doResetTable(id) {
+function doResetTable(id, _senderOverride) {
   _captureUndo('Table ' + id + ' reset');
   const group = getCombinedGroup(id);
   // Snapshot BEFORE deletion so we can record session duration
@@ -8164,7 +8165,7 @@ function doResetTable(id) {
   const turns = state.turnCounts[id] || 0;
   const turnNames = ['', '1st', '2nd', '3rd', '4th'];
   const next = Math.min(turns + 1, 4);
-  db.ref('eclipse/deck7/resets').set({ tableId: id, ts: Date.now(), deviceId: DEVICE_ID, sender: DEVICE_ID, nonce: Math.random().toString(36).slice(2) }).catch(() => {});
+  db.ref('eclipse/deck7/resets').set({ tableId: id, ts: Date.now(), deviceId: DEVICE_ID, sender: _senderOverride || DEVICE_ID, nonce: Math.random().toString(36).slice(2) }).catch(() => {});
   recordClearingActivity();
 
   // Daily archive — capture how long the seating lasted
