@@ -1597,13 +1597,19 @@ function buildEnvelopes(jsPDF,guests){
     if(gs.length) individuals.push(...gs.map(g=>({name:g.name,stateroom:g.stateroom||r.stateroom,lastName:g.lastName||(g.name||'').split(' ').slice(-1)[0]})));
     else individuals.push({name:r.name,stateroom:r.stateroom,lastName:r.lastName});
   }
-  const merged=[],seen={};
+  // Group by stateroom + lastName; only merge exactly 2 (a couple) → one shared envelope
+  const groups={};
   for(const g of individuals){
     const k=`${g.stateroom}|${(g.lastName||'').toUpperCase()}`;
-    if(seen[k]!==undefined) merged[seen[k]].names.push(g.name);
-    else{seen[k]=merged.length;merged.push({stateroom:g.stateroom,names:[g.name]});}
+    if(!groups[k]) groups[k]=[];
+    groups[k].push(g);
   }
-  merged.forEach((env,i)=>{
+  const envelopes=[];
+  for(const grp of Object.values(groups)){
+    if(grp.length===2) envelopes.push({stateroom:grp[0].stateroom,names:[grp[0].name,grp[1].name]});
+    else for(const g of grp) envelopes.push({stateroom:g.stateroom,names:[g.name]});
+  }
+  envelopes.forEach((env,i)=>{
     if(i>0) doc.addPage();
     doc.setFont('helvetica','bold').setFontSize(18).setTextColor(...INK);
     doc.text(env.stateroom||'',90,72);
