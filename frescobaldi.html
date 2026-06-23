@@ -873,44 +873,132 @@ function parseFirstPax(fp){
 function processCSV(txt){
   const rows = parseCSV(txt);
   if(!rows.length){ toast('CSV appears empty','err'); return; }
+
+  // New format: 2 header rows, then data rows grouped by ResID
+  // Col layout (0-based): 0=empty,1=Icons,5=Icon,6=ResID,7=FirstPax,
+  //   8=Date,9=Time,10=ResType,11=Location,12=PartySize,13=ResStatus,
+  //   14=ChargeTo,15=GID,16=TWID,17=PID,18=Table#
+  // Continuation rows (additional pax): col 6 empty, only col 7 has data
+
+  // Detect format: new format has no header keywords like "Reservation Date"
+  const hdr0 = (rows[0]||[]).map(h=>(h||'').toLowerCase());
+  const isNewFormat = hdr0.some(h=>h.includes('res id')||h.includes('first pax'));
+
+  if(isNewFormat){
+    processNewFormatCSV(rows);
+  } else {
+    processOldFormatCSV(rows);
+  }
+}
+
+// ── OLD FORMAT (original Frescobaldi CSV) ──
+function processOldFormatCSV(rows){
   const hdr = rows[0].map(h=>h.toLowerCase().replace(/\s+/g,''));
   const col = k => hdr.findIndex(h=>h.includes(k));
-  const iRes   = col('resid');
-  const iFP    = col('firstpax');
-  const iRDate = col('reservationdate');
-  const iRTime = col('reservationtime');
-  const iParty = col('partysize');
-  const iFund  = col('fundingaccount');
-  const iAmt   = col('amount');
-  const iSC    = col('servicecharge');
-  const iStat  = col('resstatus');
+  const iRes=col('resid'),iFP=col('firstpax'),iRDate=col('reservationdate');
+  const iRTime=col('reservationtime'),iParty=col('partysize');
+  const iFund=col('fundingaccount'),iAmt=col('amount'),iSC=col('servicecharge'),iStat=col('resstatus');
   if(iFP<0){ toast('FirstPax column not found','err'); return; }
+  const data=rows.slice(1).filter(r=>{const s=(iStat>=0?r[iStat]:'').toUpperCase();return s===''||s==='ACTIVE';});
+  if(!data.length){ toast('No ACTIVE rows found','err'); return; }
+  let evDate='',evTime='';
+  if(iRDate>=0&&data[0][iRDate]){const d=new Date(data[0][iRDate]);if(!isNaN(d))evDate=d.toISOString().slice(0,10);}
+  if(iRTime>=0) evTime=(data[0][iRTime]||'').split('-')[0].trim();
+  const parsed=data.map(r=>{
+    const {stateroom,lastName,title,middle,name}=parseFirstPax(r[iFP]||'');
+    const resId=(iRes>=0?r[iRes]:'')||genId();
+    const party=iParty>=0?(parseInt(r[iParty])||1):1;
+    const funding=iFund>=0?r[iFund]:'';
+    const amount=iAmt>=0?parseFloat((r[iAmt]||'0').replace(/[^0-9.]/g,''))||0:0;
+    const sc=iSC>=0?parseFloat(r[iSC])||0:0;
+    return {resId,name,lastName,stateroom,partySize:party,funding,amount,serviceCharge:sc,chargeTo:'',tableHint:''};
+  });
+  st._importRows=parsed; st._importMeta={evDate,evTime};
+  showImportModal(parsed,evDate,evTime);
+}
 
-  const data = rows.slice(1).filter(r=>{
-    const s=(iStat>=0?r[iStat]:'').toUpperCase();
+// ── NEW FORMAT ──
+// Cols: 6=ResID, 7=FirstPax, 8=Date, 9=Time, 12=PartySize, 13=ResStatus, 14=ChargeTo, 18=Table#
+// Continuation rows: col 6 empty → additional pax for previous ResID group
+function processNewFormatCSV(rows){
+  // Skip header rows (rows where col 6 is not a UUID)
+  const isUUID = v => /^[0-9a-f-]{30,}$/i.test((v||'').trim());
+  const data = rows.filter(r => (r[6]&&isUUID(r[6])) || (!r[6]&&r[7]));
+
+  // Group rows by ResID
+  const groups = [];
+  for(const r of data){
+    if(isUUID(r[6])){
+      groups.push({resId:r[6].trim(),rows:[r]});
+    } else if(groups.length){
+      groups[groups.length-1].rows.push(r);
+    }
+  }
+
+  // Filter ACTIVE groups (status in col 13 of the main row)
+  const active = groups.filter(g=>{
+    const s=(g.rows[0][13]||'').trim().toUpperCase();
     return s===''||s==='ACTIVE';
   });
-  if(!data.length){ toast('No ACTIVE rows found','err'); return; }
+  if(!active.length){ toast('No ACTIVE reservations found','err'); return; }
 
+  // Parse event date/time from first group's main row
   let evDate='',evTime='';
-  if(iRDate>=0&&data[0][iRDate]){
-    const d=new Date(data[0][iRDate]);
+  const fr=active[0].rows[0];
+  if(fr[8]){
+    const d=new Date(fr[8]);
     if(!isNaN(d)) evDate=d.toISOString().slice(0,10);
   }
-  if(iRTime>=0) evTime=(data[0][iRTime]||'').split('-')[0].trim();
+  if(fr[9]) evTime=(fr[9]||'').split('-')[0].trim().replace(/^(\d:\d)/,'0$1');
 
-  const parsed = data.map(r=>{
-    const {stateroom,lastName,title,middle,name} = parseFirstPax(r[iFP]||'');
-    const resId   = (iRes>=0?r[iRes]:'')||genId();
-    const party   = iParty>=0 ? (parseInt(r[iParty])||1) : 1;
-    const funding = iFund>=0  ? r[iFund]                  : '';
-    const amount  = iAmt>=0   ? parseFloat((r[iAmt]||'0').replace(/[^0-9.]/g,''))||0 : 0;
-    const sc      = iSC>=0    ? parseFloat(r[iSC])||0     : 0;
-    return {resId,name,lastName,stateroom,partySize:party,funding,amount,serviceCharge:sc};
-  });
+  // Each group → one reservation entry per STATEROOM (for letters + seating)
+  const parsed=[];
+  for(const g of active){
+    const mr=g.rows[0]; // main row
+    const partySize=parseInt(mr[12])||1;
+    const chargeTo=(mr[14]||'').trim();
+    const tableHint=(mr[18]||'').trim();
 
-  st._importRows = parsed;
-  st._importMeta = {evDate,evTime};
+    // Collect all pax rows (main + continuations)
+    const allPax=g.rows.map(r=>r[7]).filter(Boolean);
+
+    // Group pax by stateroom (for per-stateroom reservation entries)
+    const byRoom={};
+    for(const fp of allPax){
+      const p=parseFirstPax(fp);
+      if(!byRoom[p.stateroom]) byRoom[p.stateroom]={pax:[],stateroom:p.stateroom,lastName:p.lastName};
+      byRoom[p.stateroom].pax.push(p);
+    }
+
+    const rooms=Object.values(byRoom);
+    rooms.forEach((rm,idx)=>{
+      // Primary guest for this stateroom
+      const primary=rm.pax[0];
+      // If multiple pax in stateroom, build compound name (e.g. "Mr. & Mrs. Smith")
+      let displayName=primary.name;
+      if(rm.pax.length===2){
+        const p2=rm.pax[1];
+        if(primary.lastName===p2.lastName){
+          displayName=`${primary.title} & ${p2.title} ${primary.lastName}`;
+        } else {
+          displayName=`${primary.name} & ${p2.name}`;
+        }
+      } else if(rm.pax.length>2){
+        displayName=`${primary.name} + ${rm.pax.length-1}`;
+      }
+      // Firebase key: use resId for first stateroom, resId_idx for others
+      const resId=idx===0?g.resId:`${g.resId}_${idx}`;
+      parsed.push({
+        resId,name:displayName,lastName:primary.lastName,
+        stateroom:rm.stateroom,
+        partySize:idx===0?partySize:rm.pax.length,
+        chargeTo,tableHint,funding:chargeTo,amount:0,serviceCharge:0,
+        guests:rm.pax.map(p=>p.name),
+      });
+    });
+  }
+
+  st._importRows=parsed; st._importMeta={evDate,evTime};
   showImportModal(parsed,evDate,evTime);
 }
 
@@ -920,12 +1008,14 @@ function showImportModal(parsed,date,time){
     (date?` Event date: <strong>${fmtDateLong(date)}</strong>`:'') +
     (time?` · Time: <strong>${time}</strong>`:'') +
     `<br>Names normalized from CSV format. Review before importing.`;
+  const hasTable = parsed.some(r=>r.tableHint);
   const rows = parsed.slice(0,60).map(r=>`<tr>
     <td>${esc(r.name)}</td><td>${esc(r.stateroom)}</td>
     <td style="text-align:center">${r.partySize}</td>
-    <td style="color:var(--dim)">${esc(r.funding)}</td></tr>`).join('');
+    <td style="color:var(--dim)">${esc(r.chargeTo||r.funding)}</td>
+    ${hasTable?`<td style="color:var(--dim);font-size:10px">${esc(r.tableHint||'')}</td>`:''}</tr>`).join('');
   document.getElementById('import-preview').innerHTML =
-    `<table class="preview-table"><thead><tr><th>Name</th><th>Stateroom</th><th>Party</th><th>Funding</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `<table class="preview-table"><thead><tr><th>Name</th><th>Stateroom</th><th>Party</th><th>Charge To</th>${hasTable?'<th>Table</th>':''}</tr></thead><tbody>${rows}</tbody></table>`+
     (parsed.length>60?`<div style="font-size:10px;color:var(--dim);padding:8px 0">...and ${parsed.length-60} more</div>`:'');
   document.getElementById('import-modal').classList.add('open');
 }
@@ -944,8 +1034,11 @@ async function confirmImport(){
   const batch={};
   for(const r of st._importRows){
     const k=r.resId.replace(/[.#$[\]]/g,'_');
-    batch[k]={name:r.name,lastName:r.lastName,stateroom:r.stateroom,partySize:r.partySize,
-              funding:r.funding,amount:r.amount,serviceCharge:r.serviceCharge,dietary:'',notes:''};
+    const entry={name:r.name,lastName:r.lastName,stateroom:r.stateroom,partySize:r.partySize,
+              funding:r.chargeTo||r.funding,amount:r.amount||0,serviceCharge:r.serviceCharge||0,dietary:'',notes:''};
+    if(r.tableHint) entry.tableHint=r.tableHint;
+    if(r.guests&&r.guests.length) entry.guests=r.guests;
+    batch[k]=entry;
   }
   await db.ref(`${ROOT}/events/${st.currentId}/reservations`).update(batch);
   closeImportModal();
