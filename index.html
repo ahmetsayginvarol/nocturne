@@ -272,6 +272,47 @@ body {
   flex-shrink: 0;
 }
 
+/* ─── RESET TIMER PILL ─── */
+#reset-timer-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: rgba(201,168,76,0.07);
+  border: 1px solid rgba(201,168,76,0.22);
+  border-radius: 6px;
+  padding: 5px 10px;
+  min-width: 110px;
+  max-width: 200px;
+}
+.rtp-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: var(--gold);
+  opacity: 0.7;
+  white-space: nowrap;
+}
+.rtp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.rtp-table {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-mid);
+  letter-spacing: .03em;
+}
+.rtp-countdown {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+}
+
 .seating-group { display: flex; gap: 5px; }
 
 .s-legend {
@@ -2998,6 +3039,12 @@ body.fs-mode #fs-hud { animation: hud-in 0.35s cubic-bezier(.2,.8,.3,1) both; }
       <circle class="meter-dot" id="mstr-dot" r="4" fill="#2dd4bf" cx="4" cy="46" style="filter:drop-shadow(0 0 7px #2dd4bf)"/>
     </svg>
     <div class="meter-val" id="mstr-val" style="color:#2dd4bf">QUIET</div>
+  </div>
+  <!-- Reset timer pill — hidden until at least one timer is active -->
+  <div class="sep" id="reset-pill-sep" style="display:none;"></div>
+  <div id="reset-timer-pill" style="display:none;">
+    <div class="rtp-label">⏱ RESETTING</div>
+    <div id="rtp-list"></div>
   </div>
 </div>
 
@@ -8040,6 +8087,28 @@ function resetTableConfirm(id) {
 let _pendingResetTimers = {}; // tableId → { timeoutId, endsAt, intervalId }
 
 // ── Helpers for Firebase-synced reset timers ─────────────────────────────────
+function _updateResetPill() {
+  const pill = document.getElementById('reset-timer-pill');
+  const sep  = document.getElementById('reset-pill-sep');
+  const list = document.getElementById('rtp-list');
+  if (!pill || !list) return;
+  const ids = Object.keys(_pendingResetTimers);
+  if (ids.length === 0) {
+    pill.style.display = 'none';
+    if (sep) sep.style.display = 'none';
+    return;
+  }
+  pill.style.display = 'flex';
+  if (sep) sep.style.display = '';
+  list.innerHTML = ids.map(tableId => {
+    const p = _pendingResetTimers[tableId];
+    const secsLeft = Math.max(0, Math.round((p.endsAt - Date.now()) / 1000));
+    const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
+    const label = m > 0 ? m + ':' + String(s).padStart(2,'0') : s + 's';
+    return `<div class="rtp-row"><span class="rtp-table">Table ${tableId}</span><span class="rtp-countdown">${label}</span></div>`;
+  }).join('');
+}
+
 function _cleanupLocalTimer(id) {
   const p = _pendingResetTimers[id];
   if (!p) return;
@@ -8047,6 +8116,7 @@ function _cleanupLocalTimer(id) {
   clearInterval(p.intervalId);
   delete _pendingResetTimers[id];
   document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
+  _updateResetPill();
 }
 
 function _startLocalTimerWatch(id, endsAt) {
@@ -8058,6 +8128,7 @@ function _startLocalTimerWatch(id, endsAt) {
   const timeoutId  = setTimeout(() => _fireResetTimer(id), remaining);
   _pendingResetTimers[id] = { timeoutId, intervalId, endsAt };
   _tickResetCountdown(id);
+  _updateResetPill();
 }
 
 function _fireResetTimer(id) {
@@ -8127,6 +8198,7 @@ function _tickResetCountdown(id) {
     }
     cd.textContent = '⏱ ' + label;
   }
+  _updateResetPill();
 }
 
 function doResetTable(id, _senderOverride) {
