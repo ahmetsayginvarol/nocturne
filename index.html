@@ -938,16 +938,23 @@ body {
 }
 /* ── Table dot intro wave ── */
 @keyframes tm-intro {
-  from { transform: translate(-50%,-50%) scale(0); opacity: 0; }
-  to   { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+  0%   { transform: translate(-50%,-50%) scale(0);    opacity: 0; filter: brightness(7) saturate(0); }
+  48%  { transform: translate(-50%,-50%) scale(1.38); opacity: 1; filter: brightness(4) saturate(0.15); }
+  70%  { transform: translate(-50%,-50%) scale(0.87);              filter: brightness(2) saturate(0.6); }
+  85%  { transform: translate(-50%,-50%) scale(1.06);              filter: brightness(1.25) saturate(0.9); }
+  100% { transform: translate(-50%,-50%) scale(1);    opacity: 1; filter: brightness(1) saturate(1); }
 }
-@keyframes tm-hue-spin {
-  from { filter: hue-rotate(0deg)   brightness(1.35); }
-  to   { filter: hue-rotate(360deg) brightness(1.35); }
+/* Gold shimmer echo — second wave after all dots are born */
+@keyframes tm-gold-echo {
+  0%   { filter: brightness(1)   saturate(1); }
+  30%  { filter: brightness(2.8) saturate(5) sepia(1); }
+  100% { filter: brightness(1)   saturate(1); }
 }
 .tm.tm-intro {
-  animation: tm-intro 0.45s cubic-bezier(.34,1.56,.64,1) both,
-             tm-hue-spin 0.55s linear infinite;
+  animation: tm-intro 0.6s cubic-bezier(.22,1.4,.36,1) both;
+}
+.tm.tm-gold-echo {
+  animation: tm-gold-echo 0.5s ease-out both;
 }
 
 /* ─── UNDO TOAST ─── */
@@ -3901,7 +3908,7 @@ const _splash = (function() {
           sc.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border-radius:50%;pointer-events:none;z-index:9998;will-change:opacity;animation:stars-breathe 4s ease-in-out infinite alternate;transition:opacity 1.8s ease;';
           sc.style.boxShadow = _starShadow;
           document.body.appendChild(sc);
-          const DOT_TOTAL = 380 + 650 + 450;
+          const DOT_TOTAL = 380 + 650 + 600;
           setTimeout(function() {
             sc.style.opacity = '0';
             setTimeout(function() { if (sc.parentNode) sc.parentNode.removeChild(sc); }, 1900);
@@ -3909,8 +3916,8 @@ const _splash = (function() {
         }
 
         _introAnimating = true;
-        // DOT_DUR must match the tm-intro CSS animation duration (450ms)
-        const DOT_START = 380, SPREAD_MS = 650, DOT_DUR = 450;
+        // DOT_DUR must match the tm-intro CSS animation duration (600ms)
+        const DOT_START = 380, SPREAD_MS = 650, DOT_DUR = 600, ECHO_DUR = 500;
 
         // Map fade-in — opacity only, single GPU layer
         const mapCont = document.getElementById('map-container');
@@ -3926,7 +3933,8 @@ const _splash = (function() {
           });
         }
 
-        // Unlock renderAll after the full intro sequence completes
+        // Unlock renderAll after wave 1 completes — echo is cosmetic and doesn't
+        // need to block the render queue.
         setTimeout(function() {
           _introAnimating = false;
           if (_introPendRender) { _introPendRender = false; renderAll(); }
@@ -3953,18 +3961,32 @@ const _splash = (function() {
           });
           const longestDelay = Math.max.apply(null, withDist.map(function(d) { return d.delay; }));
 
-          // Single rAF: set delays + start animations (no per-dot GPU promotion)
+          // Wave 1 — stellar ignition: each dot pops in as a white-hot flash,
+          // spring-overshoots, then cools to its natural colour.
           requestAnimationFrame(function() {
             withDist.forEach(function(item) {
               item.dot.style.animationDelay = item.delay + 'ms';
               item.dot.classList.add('tm-intro');
             });
+
+            // Wave 2 — gold echo: after the last dot's ignition settles, a warm
+            // gold shimmer rolls outward across the constellation.
             setTimeout(function() {
-              withDist.forEach(function(item) {
-                item.dot.classList.remove('tm-intro');
-                item.dot.style.animationDelay = '';
+              requestAnimationFrame(function() {
+                withDist.forEach(function(item) {
+                  item.dot.style.animationDelay = item.delay + 'ms';
+                  item.dot.classList.add('tm-gold-echo');
+                });
+                // Final cleanup — remove all intro classes once echo completes
+                setTimeout(function() {
+                  withDist.forEach(function(item) {
+                    item.dot.classList.remove('tm-intro');
+                    item.dot.classList.remove('tm-gold-echo');
+                    item.dot.style.animationDelay = '';
+                  });
+                }, longestDelay + ECHO_DUR + 100);
               });
-            }, longestDelay * 2 + DOT_DUR + 100);
+            }, longestDelay + DOT_DUR + 80); // start echo after last ignition settles
           });
         }, DOT_START);
 
