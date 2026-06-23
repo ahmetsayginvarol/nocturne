@@ -352,7 +352,7 @@ select.em-input{cursor:pointer}
       <div class="docs-panel">
         <div class="docs-section">
           <h3>Invitation Pack</h3>
-          <div class="doc-row"><input type="checkbox" class="check-input" id="chk-letters" checked><label for="chk-letters">Invitation Letters (one per reservation)</label></div>
+          <div class="doc-row"><input type="checkbox" class="check-input" id="chk-letters" checked><label for="chk-letters">Invitation Letters (one per guest)</label></div>
           <div class="doc-row"><input type="checkbox" class="check-input" id="chk-envelopes" checked><label for="chk-envelopes">Envelopes (9.5″ × 4.13″ landscape)</label></div>
           <button class="gen-btn" id="btn-zip" onclick="generateZip()">⬇ GENERATE ZIP</button>
           <div class="gen-progress" id="zip-progress"></div>
@@ -974,7 +974,7 @@ function processNewFormatCSV(rows){
       partySize,
       chargeTo,tableHint,
       funding:chargeTo,amount:0,serviceCharge:0,
-      guests:allPax.map(p=>({name:p.name,stateroom:p.stateroom})),
+      guests:allPax.map(p=>({name:p.name,stateroom:p.stateroom,lastName:p.lastName})),
     });
   }
 
@@ -1038,7 +1038,8 @@ async function confirmImport(){
 function renderResTable(){
   const tbody = document.getElementById('guest-tbody');
   const sorted = Object.entries(st.reservations).sort((a,b)=>(a[1].stateroom||'').localeCompare(b[1].stateroom||''));
-  document.getElementById('guest-count').textContent = sorted.length+' guest'+(sorted.length!==1?'s':'');
+  const totalGuests=sorted.reduce((s,[,r])=>{const gs=r.guests||[];return s+(gs.length||r.partySize||1);},0);
+  document.getElementById('guest-count').textContent=totalGuests+' guest'+(totalGuests!==1?'s':'');
   tbody.innerHTML = sorted.map(([id,r],i)=>{
     const dot = st.seating[id]?.tableId;
     const guests=(r.guests||[]).map(g=>typeof g==='string'?{name:g,stateroom:''}:g);
@@ -1501,29 +1502,17 @@ function buildLetters(jsPDF,guests,ev){
   const price=p.price||99,tax=p.tax||20;
   const director=p.director||'Peter Priestley';
 
-  const srMap={};
+  // Flatten to one entry per individual guest
+  const individuals=[];
   for(const r of guests){
-    const sr=r.stateroom||'_';
-    if(!srMap[sr]) srMap[sr]=[];
-    srMap[sr].push(r);
+    const gs=(r.guests||[]).map(g=>typeof g==='string'?{name:g,stateroom:r.stateroom}:g);
+    if(gs.length) individuals.push(...gs.map(g=>({name:g.name,stateroom:g.stateroom||r.stateroom})));
+    else individuals.push({name:r.name,stateroom:r.stateroom});
   }
 
-  function salutation(group){
-    if(group.length===1) return group[0].name||'Guest';
-    const[g0,g1]=group;
-    const ln0=(g0.lastName||'').toUpperCase(),ln1=(g1.lastName||'').toUpperCase();
-    if(ln0&&ln1&&ln0===ln1){
-      const t0=g0.name.split(' ')[0]||'Mr.',t1=g1.name.split(' ')[0]||'Mrs.';
-      const last=g0.name.split(' ').slice(1).join(' ');
-      return `${t0} & ${t1} ${last}`;
-    }
-    const names=group.map(g=>g.name||'Guest');
-    return names.length===2?names.join(' & '):names.slice(0,-1).join(', ')+' & '+names[names.length-1];
-  }
-
-  Object.values(srMap).forEach((group,gi)=>{
+  individuals.forEach((person,gi)=>{
     if(gi>0) doc.addPage();
-    const r=group[0];
+    const r=person; // keep variable name for compatibility below
 
     // ── Header logos — exact sample positions (art cropped to content) ──
     // Sabatini's: 157.3×56.0pt @ (204.7,72.0); Frescobaldi: 89.7×32.3pt @ (238.5,142.3)
@@ -1548,7 +1537,7 @@ function buildLetters(jsPDF,guests,ev){
 
     // ── Salutation — baseline 290.0 ──
     doc.setFont('helvetica','normal');
-    doc.text('Dear    '+salutation(group),ML,290.0);
+    doc.text('Dear    '+(person.name||'Guest'),ML,290.0);
 
     // ── Body paragraph 1 (left-aligned, exact sample line breaks) — baselines 331.8…404.3 ──
     doc.setFontSize(10);
@@ -1601,12 +1590,18 @@ function buildLetters(jsPDF,guests,ev){
 function buildEnvelopes(jsPDF,guests){
   const doc=new jsPDF({unit:'pt',format:[684,297],orientation:'landscape'});
   const INK=[22,28,38];
-  // Merge: same stateroom + same lastName → one envelope
-  const merged=[],seen={};
+  // Flatten to individual guests, then merge same stateroom + same lastName → one envelope
+  const individuals=[];
   for(const r of guests){
-    const k=`${r.stateroom}|${(r.lastName||'').toUpperCase()}`;
-    if(seen[k]!==undefined) merged[seen[k]].names.push(r.name);
-    else{seen[k]=merged.length;merged.push({stateroom:r.stateroom,names:[r.name]});}
+    const gs=(r.guests||[]).map(g=>typeof g==='string'?{name:g,stateroom:r.stateroom,lastName:r.lastName}:g);
+    if(gs.length) individuals.push(...gs.map(g=>({name:g.name,stateroom:g.stateroom||r.stateroom,lastName:g.lastName||(g.name||'').split(' ').slice(-1)[0]})));
+    else individuals.push({name:r.name,stateroom:r.stateroom,lastName:r.lastName});
+  }
+  const merged=[],seen={};
+  for(const g of individuals){
+    const k=`${g.stateroom}|${(g.lastName||'').toUpperCase()}`;
+    if(seen[k]!==undefined) merged[seen[k]].names.push(g.name);
+    else{seen[k]=merged.length;merged.push({stateroom:g.stateroom,names:[g.name]});}
   }
   merged.forEach((env,i)=>{
     if(i>0) doc.addPage();
