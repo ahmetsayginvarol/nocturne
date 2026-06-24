@@ -166,41 +166,52 @@ select.em-input{cursor:pointer}
 /* guest add/edit bottom drawer */
 .gm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center;z-index:200}
 .gm-overlay.open{display:flex}
-.gm-sheet{background:var(--sheet-bg);border:1px solid var(--b2);border-top:2px solid var(--gold);border-radius:20px 20px 0 0;width:100%;max-width:640px;padding:20px 22px 36px;max-height:92vh;overflow-y:auto}
-.gm-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.gm-sheet{background:var(--sheet-bg);border:1px solid var(--b2);border-top:3px solid var(--gold);border-radius:20px 20px 0 0;width:100%;max-width:640px;padding:20px 22px 36px;max-height:92vh;overflow-y:auto}
+.gm-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
 .gm-head h3{font-family:'Cinzel',serif;font-size:12px;color:var(--gold2);letter-spacing:2px}
-.gm-row{margin-bottom:15px}
-.gm-lbl{font-size:8.5px;letter-spacing:1.8px;color:var(--dim);text-transform:uppercase;margin-bottom:7px}
-.gm-input{width:100%;background:var(--elem-bg);border:1px solid var(--b2);border-radius:10px;color:var(--text);font-family:inherit;font-size:15px;padding:13px 14px;outline:none;transition:border-color .18s;box-sizing:border-box}
+/* field group card — wraps related rows in an elevated card */
+.gm-group{background:var(--elem-bg);border:1px solid var(--b1);border-radius:12px;overflow:hidden;margin-bottom:14px}
+.gm-group .gm-row{display:flex;flex-direction:column;margin-bottom:0;padding:10px 14px;border-bottom:1px solid var(--row-sep)}
+.gm-group .gm-row:last-child{border-bottom:none}
+.gm-group .gm-lbl{margin-bottom:3px}
+.gm-group .gm-input{background:transparent;border:none;border-bottom:1px solid transparent;border-radius:0;padding:3px 0;font-size:15px;transition:border-color .15s}
+.gm-group .gm-input:focus{border-bottom-color:var(--gold);outline:none}
+.gm-row{margin-bottom:13px}
+.gm-lbl{font-size:8px;letter-spacing:1.8px;color:var(--mid);text-transform:uppercase;margin-bottom:5px}
+.gm-input{width:100%;background:var(--inp-bg);border:1px solid var(--b2);border-radius:10px;color:var(--text);font-family:inherit;font-size:15px;padding:13px 14px;outline:none;transition:border-color .18s;box-sizing:border-box}
 .gm-input:focus{border-color:var(--gold)}
-.title-chips{display:flex;gap:8px;flex-wrap:wrap}
-.title-chip{background:var(--elem-bg);border:1px solid var(--b2);border-radius:8px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:13px;padding:9px 18px;transition:all .15s;user-select:none}
-.title-chip.sel{background:rgba(201,168,76,.14);border-color:var(--gold);color:var(--gold2)}
+.title-chips{display:flex;gap:7px;flex-wrap:wrap}
+.title-chip{background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:13px;padding:8px 16px;transition:all .15s;user-select:none}
+.title-chip:hover{border-color:var(--mid);color:var(--text)}
+.title-chip.sel{background:rgba(201,168,76,.15);border-color:var(--gold);color:var(--gold2);font-weight:600}
 .party-row{display:flex;align-items:center;gap:0;background:var(--elem-bg);border:1px solid var(--b2);border-radius:10px;overflow:hidden;width:fit-content}
 .ps-btn{background:none;border:none;color:var(--text);cursor:pointer;font-size:22px;line-height:1;padding:10px 22px;transition:background .14s}
 .ps-btn:hover{background:rgba(201,168,76,.1)}
 .ps-val{color:var(--text);font-size:16px;font-weight:600;padding:0 22px;min-width:48px;text-align:center}
 .gm-foot{display:flex;gap:10px;margin-top:22px}
-.gm-save{flex:1;background:linear-gradient(135deg,var(--gold),#b8922e);border:none;border-radius:10px;color:#1a0a00;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:1.5px;padding:15px}
-.gm-cancel{background:var(--elem-bg);border:1px solid var(--b2);border-radius:10px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:11px;padding:15px 22px}
+.gm-save{flex:1;background:linear-gradient(135deg,var(--gold),#b8922e);border:none;border-radius:10px;color:#1a0a00;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:1.5px;padding:15px;transition:opacity .15s}
+.gm-save:hover{opacity:.9}
+.gm-cancel{background:transparent;border:1px solid var(--b2);border-radius:10px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:11px;padding:15px 22px;transition:all .15s}
+.gm-cancel:hover{border-color:var(--s2);color:var(--s2)}
 .row-edit-btn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;padding:3px 6px;border-radius:4px;transition:color .12s}
 .row-edit-btn:hover{color:var(--gold2)}
 /* Party members section */
-.gm-section-hd{display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--b1)}
-.gm-section-lbl{font-size:8.5px;letter-spacing:1.8px;color:var(--dim);text-transform:uppercase}
-.gm-party-count{font-size:10px;color:var(--mid);background:var(--elem-bg);padding:2px 9px;border-radius:20px}
-.gm-member-row{display:grid;grid-template-columns:auto 1fr 1fr 90px 28px;gap:7px;align-items:center;padding:8px 0;border-bottom:1px solid var(--row-sep)}
-.gm-member-row:last-child{border-bottom:none}
-.gm-member-idx{font-size:9px;color:var(--dim);font-family:'DM Mono',monospace;text-align:center;min-width:18px}
-.gm-member-title{display:flex;gap:4px;flex-wrap:wrap;grid-column:1/-1;padding-bottom:4px}
-.gm-tc{background:var(--elem-bg);border:1px solid var(--b2);border-radius:6px;color:var(--mid);cursor:pointer;font-size:11px;padding:5px 11px;transition:all .14s;line-height:1;font-family:inherit}
-.gm-tc.sel{background:rgba(201,168,76,.14);border-color:var(--gold);color:var(--gold2)}
-.gm-mini{width:100%;background:var(--inp-bg);border:1px solid var(--b2);border-radius:8px;color:var(--text);font-family:inherit;font-size:12px;padding:9px 10px;outline:none;transition:border-color .15s;box-sizing:border-box;min-width:0}
+.gm-section-hd{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px;padding:9px 0 9px 12px;border-top:1px solid var(--b1);border-left:3px solid var(--gold)}
+.gm-section-lbl{font-size:8.5px;letter-spacing:2px;color:var(--gold2);text-transform:uppercase}
+.gm-party-count{font-size:10px;color:var(--gold2);background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.22);padding:2px 9px;border-radius:20px}
+.gm-member-row{background:var(--elem-bg);border:1px solid var(--b1);border-left:3px solid rgba(201,168,76,.4);border-radius:10px;display:grid;grid-template-columns:1fr 1fr 90px;gap:7px;align-items:start;padding:10px 12px;margin-bottom:8px}
+.gm-member-row:last-child{margin-bottom:0}
+.gm-member-idx{font-size:9px;color:var(--gold2);opacity:.8;font-family:'DM Mono',monospace}
+.gm-member-title{display:flex;gap:4px;flex-wrap:wrap;align-items:center;grid-column:1/-1;padding-bottom:7px;border-bottom:1px solid var(--row-sep);margin-bottom:2px}
+.gm-tc{background:transparent;border:1px solid var(--b2);border-radius:6px;color:var(--mid);cursor:pointer;font-size:11px;padding:5px 10px;transition:all .14s;line-height:1;font-family:inherit}
+.gm-tc:hover{border-color:var(--mid);color:var(--text)}
+.gm-tc.sel{background:rgba(201,168,76,.15);border-color:var(--gold);color:var(--gold2)}
+.gm-mini{width:100%;background:var(--inp-bg);border:1px solid var(--b1);border-radius:8px;color:var(--text);font-family:inherit;font-size:12px;padding:8px 9px;outline:none;transition:border-color .15s;box-sizing:border-box;min-width:0}
 .gm-mini:focus{border-color:var(--gold)}
-.gm-del-member{background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;line-height:1;padding:4px;transition:color .14s;flex-shrink:0}
+.gm-del-member{background:none;border:none;color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:4px 5px;transition:color .14s;flex-shrink:0;margin-left:auto}
 .gm-del-member:hover{color:var(--s2)}
-.gm-add-member{display:flex;align-items:center;gap:6px;margin-top:12px;background:none;border:1px dashed var(--b2);border-radius:9px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:11px;padding:10px 16px;width:100%;transition:all .15s;letter-spacing:.5px}
-.gm-add-member:hover{border-color:var(--gold);color:var(--gold)}
+.gm-add-member{display:flex;align-items:center;gap:6px;margin-top:10px;background:none;border:1px dashed rgba(45,212,191,.3);border-radius:9px;color:var(--teal);opacity:.7;cursor:pointer;font-family:inherit;font-size:11px;padding:10px 16px;width:100%;transition:all .15s;letter-spacing:.5px;box-sizing:border-box}
+.gm-add-member:hover{opacity:1;border-color:var(--teal)}
 .modal-overlay.open{display:flex}
 .modal{background:var(--modal-bg);border:1px solid var(--b2);border-radius:18px;width:100%;max-width:740px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.65)}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
@@ -570,36 +581,42 @@ select.em-input{cursor:pointer}
       <h3 id="gm-head-title">ADD GUEST</h3>
       <button class="modal-close" onclick="closeGuestForm()">✕</button>
     </div>
-    <div class="gm-row">
-      <div class="gm-lbl">Title</div>
-      <div class="title-chips" id="title-chips">
-        <button class="title-chip" onclick="selTitle(this,'Mr.')">Mr.</button>
-        <button class="title-chip" onclick="selTitle(this,'Mrs.')">Mrs.</button>
-        <button class="title-chip" onclick="selTitle(this,'Ms.')">Ms.</button>
-        <button class="title-chip" onclick="selTitle(this,'Dr.')">Dr.</button>
-        <button class="title-chip" onclick="selTitle(this,'Mstr.')">Mstr.</button>
-        <button class="title-chip" onclick="selTitle(this,'Miss')">Miss</button>
+    <!-- Identity card -->
+    <div class="gm-group">
+      <div class="gm-row">
+        <div class="gm-lbl">Title</div>
+        <div class="title-chips" id="title-chips">
+          <button class="title-chip" onclick="selTitle(this,'Mr.')">Mr.</button>
+          <button class="title-chip" onclick="selTitle(this,'Mrs.')">Mrs.</button>
+          <button class="title-chip" onclick="selTitle(this,'Ms.')">Ms.</button>
+          <button class="title-chip" onclick="selTitle(this,'Dr.')">Dr.</button>
+          <button class="title-chip" onclick="selTitle(this,'Mstr.')">Mstr.</button>
+          <button class="title-chip" onclick="selTitle(this,'Miss')">Miss</button>
+        </div>
+      </div>
+      <div class="gm-row">
+        <div class="gm-lbl">First Name</div>
+        <input class="gm-input" id="gf-firstname" type="text" placeholder="e.g. Sarah" autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="gm-row">
+        <div class="gm-lbl">Last Name</div>
+        <input class="gm-input" id="gf-lastname" type="text" placeholder="e.g. Edwards" autocomplete="off" autocorrect="off" spellcheck="false">
       </div>
     </div>
-    <div class="gm-row">
-      <div class="gm-lbl">First Name</div>
-      <input class="gm-input" id="gf-firstname" type="text" placeholder="e.g. Sarah" autocomplete="off" autocorrect="off" spellcheck="false">
-    </div>
-    <div class="gm-row">
-      <div class="gm-lbl">Last Name</div>
-      <input class="gm-input" id="gf-lastname" type="text" placeholder="e.g. Edwards" autocomplete="off" autocorrect="off" spellcheck="false">
-    </div>
-    <div class="gm-row">
-      <div class="gm-lbl">Stateroom</div>
-      <input class="gm-input" id="gf-stateroom" type="text" inputmode="numeric" placeholder="e.g. 6406" autocomplete="off">
-    </div>
-    <div class="gm-row">
-      <div class="gm-lbl">Dietary Needs</div>
-      <input class="gm-input" id="gf-dietary" type="text" placeholder="Allergies, preferences…" autocomplete="off">
-    </div>
-    <div class="gm-row">
-      <div class="gm-lbl">Notes</div>
-      <input class="gm-input" id="gf-notes" type="text" placeholder="Optional note" autocomplete="off">
+    <!-- Details card -->
+    <div class="gm-group">
+      <div class="gm-row">
+        <div class="gm-lbl">Stateroom</div>
+        <input class="gm-input" id="gf-stateroom" type="text" inputmode="numeric" placeholder="e.g. 6406" autocomplete="off">
+      </div>
+      <div class="gm-row">
+        <div class="gm-lbl">Dietary Needs</div>
+        <input class="gm-input" id="gf-dietary" type="text" placeholder="Allergies, preferences…" autocomplete="off">
+      </div>
+      <div class="gm-row">
+        <div class="gm-lbl">Notes</div>
+        <input class="gm-input" id="gf-notes" type="text" placeholder="Optional note" autocomplete="off">
+      </div>
     </div>
     <!-- Party members section -->
     <div class="gm-section-hd">
@@ -1344,7 +1361,6 @@ function renderPartyMembers(){
         ${titles.map(t=>`<button class="gm-tc${m.title===t?' sel':''}" onclick="setMemberTitle(${i},'${t}',this)">${t}</button>`).join('')}
         <button class="gm-del-member" onclick="removePartyMember(${i})" title="Remove member">\u2715</button>
       </div>
-      <span></span>
       <input class="gm-mini" data-mi="${i}" data-mf="firstName" value="${m.firstName||''}" placeholder="First name" autocorrect="off" spellcheck="false" oninput="syncMember(this)">
       <input class="gm-mini" data-mi="${i}" data-mf="lastName" value="${m.lastName||''}" placeholder="Last name" autocorrect="off" spellcheck="false" oninput="syncMember(this)">
       <input class="gm-mini" data-mi="${i}" data-mf="stateroom" value="${m.stateroom||''}" placeholder="Cabin" inputmode="numeric" oninput="syncMember(this)">
