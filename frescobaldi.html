@@ -968,7 +968,7 @@ function parseFirstPax(fp){
   const tr        = (pts[3]||'').trim().toUpperCase();
   const titleMap  = {MR:'Mr.',MRS:'Mrs.',MS:'Ms.',DR:'Dr.',MSTR:'Mstr.',MISS:'Miss'};
   const title     = titleMap[tr]||tr;
-  const name      = [title,lastName].filter(Boolean).join(' ')+(middle?' '+middle+'.':'');
+  const name      = [title,middle?middle+'.':'',lastName].filter(Boolean).join(' ');
   return {stateroom,lastName,title,middle,name};
 }
 
@@ -1745,7 +1745,7 @@ function buildEnvelopes(jsPDF,guests){
   }
   const envelopes=[];
   for(const grp of Object.values(groups)){
-    if(grp.length===2) envelopes.push({stateroom:grp[0].stateroom,names:[grp[0].name,grp[1].name]});
+    if(grp.length===2){const t1=(grp[0].name||'').split(' ')[0]||'Mr.';const t2=(grp[1].name||'').split(' ')[0]||'Mrs.';envelopes.push({stateroom:grp[0].stateroom,names:[`${t1} & ${t2} ${grp[0].lastName}`]});}
     else for(const g of grp) envelopes.push({stateroom:g.stateroom,names:[g.name]});
   }
   envelopes.forEach((env,i)=>{
