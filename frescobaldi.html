@@ -303,6 +303,42 @@ select.em-input{cursor:pointer}
 [data-theme="light"] .guest-table th{background:var(--bg)}
 .theme-btn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;padding:4px 8px;line-height:1;transition:color .15s;margin-left:4px}
 .theme-btn:hover{color:var(--gold)}
+/* ── PREP MODE ── */
+.fresco-dot.reserved{border-color:var(--gold);border-style:dashed}
+.fresco-dot.reserved .dn{color:var(--gold2)}
+.fresco-dot.reserved .dc{color:var(--gold)}
+.fresco-dot.preassigned{border-color:var(--gold2);border-style:dashed;background:rgba(201,168,76,.08)}
+.fresco-dot.preassigned .dn{color:var(--gold2)}
+.fresco-dot.preassigned .dc{color:var(--gold)}
+.fresco-dot.drop-target{border-color:var(--teal)!important;border-style:solid!important;background:rgba(45,212,191,.25)!important;animation:dpulse .6s ease-in-out infinite}
+.fresco-dot.dragging-src{opacity:.3;pointer-events:none}
+.fresco-dot.prep-draggable{cursor:grab;touch-action:none}
+.fresco-dot.prep-draggable:active{cursor:grabbing}
+.prep-bar{position:absolute;bottom:0;left:0;right:0;background:rgba(9,14,25,.97);border-top:1px solid var(--gold);display:flex;align-items:center;gap:10px;padding:10px 16px;z-index:40;transform:translateY(100%);transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.prep-bar.open{transform:translateY(0)}
+.prep-bar span{font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;flex:1}
+[data-theme="light"] .prep-bar{background:rgba(255,253,248,.98);border-top-color:var(--gold)}
+#combo-svg line{stroke:var(--gold);stroke-width:2;stroke-dasharray:6 4;opacity:.45}
+#combo-svg line.prep-line{stroke:var(--gold2);stroke-dasharray:5 3;opacity:.55}
+/* Pre-assign modal */
+.pa-modal-overlay{position:fixed;inset:0;background:var(--overlay-bg);z-index:200;display:none;align-items:center;justify-content:center}
+.pa-modal-overlay.open{display:flex}
+.pa-modal{background:var(--modal-bg);border:1px solid var(--b2);border-radius:16px;width:min(420px,94vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.7)}
+.pa-modal-head{padding:16px 18px 12px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.pa-modal-title{font-family:'Cinzel',serif;font-size:13px;color:var(--gold);letter-spacing:1px}
+.pa-table-info{padding:10px 18px 8px;font-size:11px;color:var(--mid);border-bottom:1px solid var(--b1);flex-shrink:0}
+.pa-table-info strong{color:var(--text)}
+.pa-party-list{flex:1;overflow-y:auto;padding:4px 0;min-height:60px}
+.pa-row{display:flex;align-items:center;justify-content:space-between;width:100%;padding:11px 18px;background:none;border:none;border-bottom:1px solid var(--row-sep);cursor:pointer;text-align:left;transition:background .15s;gap:10px;color:inherit;font-family:inherit}
+.pa-row:hover{background:var(--hover-bg)}
+.pa-row.clear-row .pa-name{color:var(--s2)}
+.pa-name{font-size:11px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pa-size{font-size:10px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:20px;flex-shrink:0}
+.pa-size.fit-good{background:rgba(34,197,94,.15);color:#22c55e}
+.pa-size.fit-ok{background:rgba(201,168,76,.15);color:var(--gold2)}
+.pa-size.fit-warn{background:rgba(239,68,68,.15);color:var(--s2)}
+.pa-empty{padding:20px 18px;font-size:11px;color:var(--dim);text-align:center}
+.pa-modal-foot{padding:12px 18px;border-top:1px solid var(--b1);display:flex;justify-content:flex-end;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -439,6 +475,7 @@ select.em-input{cursor:pointer}
     <button class="back-btn" onclick="showView('prep')">←</button>
     <div class="topbar-title" id="seat-title">SEATING</div>
     <div class="topbar-meta" id="seat-stats">0 / 0 seated</div>
+    <button class="tb-btn" id="prep-mode-btn" onclick="togglePrepMode()" title="Pre-event table arrangement">PREP</button>
   </div>
   <!-- Guest drawer -->
   <div class="gp-overlay" id="gp-overlay" onclick="toggleGuestDrawer()"></div>
@@ -464,6 +501,12 @@ select.em-input{cursor:pointer}
         </div>
       </div>
       <button class="gp-toggle" id="gp-toggle" onclick="toggleGuestDrawer()">☰ GUESTS</button>
+      <div class="prep-bar" id="prep-bar">
+        <span>PREP — tap table to assign · drag to combine</span>
+        <button class="tb-btn gold" onclick="autoArrange()">AUTO</button>
+        <button class="tb-btn" onclick="clearAllPreassignments()">CLEAR</button>
+        <button class="tb-btn" onclick="togglePrepMode()">EXIT</button>
+      </div>
       <div class="calib-bar" id="calib-bar">
         <span>⚙ CALIBRATION MODE — drag dots to position</span>
         <button class="tb-btn gold" onclick="stopCalibration()">SAVE & EXIT</button>
@@ -586,6 +629,21 @@ select.em-input{cursor:pointer}
   </div>
 </div>
 
+<!-- Pre-assign modal -->
+<div class="pa-modal-overlay" id="pa-overlay" onclick="if(event.target===this)closePaModal()">
+  <div class="pa-modal">
+    <div class="pa-modal-head">
+      <span class="pa-modal-title" id="pa-modal-title">ASSIGN TABLE</span>
+      <button class="modal-close" onclick="closePaModal()">✕</button>
+    </div>
+    <div class="pa-table-info" id="pa-table-info"></div>
+    <div class="pa-party-list" id="pa-party-list"></div>
+    <div class="pa-modal-foot">
+      <button class="tb-btn" onclick="closePaModal()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="handleFile(event)">
 <div class="toast" id="toast"></div>
 
@@ -646,12 +704,12 @@ function occupiedSet(){
 //   false → no viable nearby combination
 const COMBINE_STEP_MAX = 20;  // max % distance from cluster to absorb a neighbour
 const COMBINE_MAX_TABLES = 6; // sanity cap on tables in one combination
-function findCombine(tid, partySize){
+function findCombine(tid, partySize, extraExclude){
   const cap=TABLE_CAPS[tid]||4;
   if(cap>=partySize) return null;
   const occ=occupiedSet();
   const pool=[];
-  for(let i=1;i<=31;i++){ if(i===tid||occ.has(i)) continue; pool.push(i); }
+  for(let i=1;i<=31;i++){ if(i===tid||occ.has(i)||(extraExclude&&extraExclude.has(i))) continue; pool.push(i); }
 
   const chosen=[], cluster=[dotPos(tid)];
   let total=cap;
@@ -751,7 +809,7 @@ function setupMapGestures(){
 let db, st = {
   events:{}, currentId:null, reservations:{}, seating:{},
   dots:{}, prefs:{}, selectedResId:null, calibrating:false, view:'dashboard',
-  _importRows:[], _importMeta:{},
+  _importRows:[], _importMeta:{}, preassignments:{}, prepMode:false, _prepDrag:null,
 };
 
 // ── INIT ──
@@ -905,6 +963,7 @@ function openEvent(id){
   if(st._prevId){
     db.ref(`${ROOT}/events/${st._prevId}/reservations`).off();
     db.ref(`${ROOT}/events/${st._prevId}/seating`).off();
+    db.ref(`${ROOT}/events/${st._prevId}/preassignments`).off();
   }
   st._prevId = id;
   db.ref(`${ROOT}/events/${id}/reservations`).on('value',sn=>{ st.reservations=sn.val()||{}; renderResTable(); });
@@ -912,6 +971,10 @@ function openEvent(id){
     st.seating=sn.val()||{};
     renderResTable();
     if(st.view==='seating'){ renderGuestPanel(); renderDots(); updateSeatStats(); }
+  });
+  db.ref(`${ROOT}/events/${id}/preassignments`).on('value',sn=>{
+    st.preassignments=sn.val()||{};
+    if(st.view==='seating') renderDots();
   });
   switchTab('guests');
   showView('prep');
@@ -1277,7 +1340,7 @@ function buildMap(){
   mpz.s=1; mpz.x=0; mpz.y=0;
   const c=document.getElementById('map-container');
   c.style.transform=''; c.style.willChange='transform';
-  c.innerHTML='';
+  c.innerHTML='<svg id="combo-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4"></svg>';
   for(let i=1;i<=31;i++){
     const pos={...DOTS_DEFAULT[i],...(st.dots[i]||{})};
     const d=document.createElement('div');
@@ -1338,22 +1401,72 @@ function renderDots(){
     const sel=st.selectedResId;
     const seatedAt=sel?st.seating[sel]?.tableId:null;
     const alreadyHere=sel&&seatedAt===i;
-    dot.classList.remove('target-hint','combine-hint','focus-table','dimmed');
+    // Pre-assignment visual (reserved but not yet live-seated)
+    const pa=st.preassignments[i];
+    const paAbsorbed=prepAbsorbedSet();
+    dot.classList.remove('target-hint','combine-hint','focus-table','dimmed','reserved','preassigned');
     if(seatedAt){
-      // Selected guest is already seated: glow their table, dim everything else
       if(i===seatedAt) dot.classList.add('focus-table');
       else dot.classList.add('dimmed');
     } else if(sel&&!alreadyHere&&gs.length===0){
       const pax=paxOf(st.reservations[sel]);
       const cap=TABLE_CAPS[i]||4;
-      if(cap>=pax) dot.classList.add('target-hint');           // fits on its own
-      else if(findCombine(i,pax)) dot.classList.add('combine-hint'); // can anchor a combo
+      if(cap>=pax) dot.classList.add('target-hint');
+      else if(findCombine(i,pax)) dot.classList.add('combine-hint');
+    } else if(pa&&!pa.primaryTable&&!absorbed.has(i)&&gs.length===0){
+      // Preassigned/reserved: show in prep mode as preassigned, in live mode as reserved
+      dot.classList.add(st.prepMode?'preassigned':'reserved');
+      const res=st.reservations[pa.resId];
+      if(res&&!dot.querySelector('.dc').textContent){
+        dot.querySelector('.dc').textContent=(res.lastName||res.name?.split(' ').slice(-1)[0]||'')+(paxOf(res)>1?' ×'+paxOf(res):'');
+      }
+      // Pill reshape for combined preassignment
+      if(pa.combinedWith&&pa.combinedWith.length&&!absorbed.has(i)){
+        const allIds=[i,...pa.combinedWith];
+        const px_=allIds.map(id=>{const p={...DOTS_DEFAULT[id],...(st.dots[id]||{})};return{x:p.x/100*cw,y:p.y/100*ch};});
+        const minX2=Math.min(...px_.map(p=>p.x)),maxX2=Math.max(...px_.map(p=>p.x));
+        const minY2=Math.min(...px_.map(p=>p.y)),maxY2=Math.max(...px_.map(p=>p.y));
+        const cx2=(minX2+maxX2)/2,cy2=(minY2+maxY2)/2;
+        const w2=Math.max(34,maxX2-minX2+34),h2=Math.max(34,maxY2-minY2+34);
+        dot.style.left=(cx2/cw*100)+'%';dot.style.top=(cy2/ch*100)+'%';
+        dot.style.width=w2+'px';dot.style.height=h2+'px';dot.style.borderRadius=(Math.min(w2,h2)/2)+'px';
+      }
+    }
+    // Hide dots absorbed by preassignment (when not live-seated)
+    if(paAbsorbed.has(i)&&!absorbed.has(i)&&gs.length===0){dot.style.display='none';}
+  }
+  // Draw SVG connection lines for live combined seats and preassignment combos
+  drawComboLines(cw,ch,absorbed);
+}
+
+function drawComboLines(cw,ch,liveAbsorbed){
+  const svg=document.getElementById('combo-svg');
+  if(!svg) return;
+  svg.innerHTML='';
+  const line=(x1,y1,x2,y2,cls)=>{const l=document.createElementNS('http://www.w3.org/2000/svg','line');l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);if(cls)l.className.baseVal=cls;svg.appendChild(l);};
+  // Live combos
+  for(const rec of Object.values(st.seating||{})){
+    if(!rec.tableId||!rec.combinedWith?.length) continue;
+    const p0={...DOTS_DEFAULT[rec.tableId],...(st.dots[rec.tableId]||{})};
+    for(const tid of rec.combinedWith){
+      const p1={...DOTS_DEFAULT[tid],...(st.dots[tid]||{})};
+      line(p0.x/100*cw,p0.y/100*ch,p1.x/100*cw,p1.y/100*ch,'');
+    }
+  }
+  // Prep combos
+  for(const[pid,pa] of Object.entries(st.preassignments||{})){
+    if(!pa.combinedWith?.length||pa.primaryTable) continue;
+    const p0={...DOTS_DEFAULT[pid],...(st.dots[pid]||{})};
+    for(const tid of pa.combinedWith){
+      const p1={...DOTS_DEFAULT[tid],...(st.dots[tid]||{})};
+      line(p0.x/100*cw,p0.y/100*ch,p1.x/100*cw,p1.y/100*ch,'prep-line');
     }
   }
 }
 
 function handleDotClick(tid){
   if(st.calibrating) return;
+  if(st.prepMode){ showPrepAssignModal(tid,[]); return; }
   // If selected guest is already seated, only their table is clickable (others have pointer-events:none)
   if(st.selectedResId&&st.seating[st.selectedResId]?.tableId){
     showDotPop(tid); return;
@@ -1545,6 +1658,249 @@ function stopCalibration(){
 async function resetDots(){
   await db.ref(`${ROOT}/dots`).remove();
   st.dots={};buildMap();toast('Positions reset to defaults');
+}
+
+// ── PREP MODE ──────────────────────────────────────────────────────────────
+function prepAbsorbedSet(){
+  const s=new Set();
+  for(const pa of Object.values(st.preassignments||{})){
+    if(pa.combinedWith&&!pa.primaryTable) pa.combinedWith.forEach(id=>s.add(Number(id)));
+  }
+  return s;
+}
+
+function getPa(tableId){
+  // Direct primary record
+  const p=st.preassignments[tableId];
+  if(p&&!p.primaryTable) return {...p,isPrimary:true,tableId};
+  // Check if it's a secondary in someone else's combo
+  for(const[pid,pa] of Object.entries(st.preassignments||{})){
+    if(pa.combinedWith&&pa.combinedWith.map(Number).includes(Number(tableId)))
+      return {...pa,isPrimary:false,tableId:Number(pid)};
+  }
+  return null;
+}
+
+function togglePrepMode(){
+  st.prepMode=!st.prepMode;
+  const bar=document.getElementById('prep-bar');
+  const btn=document.getElementById('prep-mode-btn');
+  bar.classList.toggle('open',st.prepMode);
+  btn?.classList.toggle('gold',st.prepMode);
+  if(st.prepMode){
+    // Deselect any live guest, close drawer
+    st.selectedResId=null; updateSelBar();
+    document.getElementById('gp-drawer').classList.remove('open');
+    document.getElementById('gp-overlay').classList.remove('open');
+    document.getElementById('gp-toggle').classList.remove('active');
+    bindPrepDrag();
+  } else {
+    unbindPrepDrag();
+  }
+  renderDots();
+}
+
+function bindPrepDrag(){
+  for(let i=1;i<=31;i++){
+    const d=document.getElementById('dot-'+i);
+    if(d){ d.classList.add('prep-draggable'); d._prepPD=onPrepPointerDown.bind(d); d.addEventListener('pointerdown',d._prepPD); }
+  }
+}
+function unbindPrepDrag(){
+  for(let i=1;i<=31;i++){
+    const d=document.getElementById('dot-'+i);
+    if(d){ d.classList.remove('prep-draggable','dragging-src'); if(d._prepPD) d.removeEventListener('pointerdown',d._prepPD); }
+  }
+}
+
+function onPrepPointerDown(ev){
+  if(ev.button&&ev.button!==0) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const tableId=parseInt(this.dataset.id);
+  // Don't drag absorbed dots
+  if(prepAbsorbedSet().has(tableId)) return;
+  const dot=this;
+  const startX=ev.clientX,startY=ev.clientY;
+  let dragging=false,ghost=null;
+  const THRESH=10;
+
+  const onMove=mv=>{
+    const dx=mv.clientX-startX,dy=mv.clientY-startY;
+    if(!dragging&&Math.hypot(dx,dy)>THRESH){
+      dragging=true;
+      ghost=document.createElement('div');
+      ghost.style.cssText='position:fixed;width:38px;height:38px;border-radius:50%;z-index:9999;opacity:.7;pointer-events:none;transform:translate(-50%,-50%);border:2px dashed #c9a84c;background:rgba(201,168,76,.25);display:flex;align-items:center;justify-content:center;font-family:Cinzel,serif;font-size:12px;color:#c9a84c;font-weight:700';
+      ghost.textContent=tableId;
+      document.body.appendChild(ghost);
+      dot.classList.add('dragging-src');
+    }
+    if(dragging&&ghost){
+      ghost.style.left=mv.clientX+'px'; ghost.style.top=mv.clientY+'px';
+      ghost.style.visibility='hidden';
+      const el=document.elementFromPoint(mv.clientX,mv.clientY);
+      ghost.style.visibility='visible';
+      document.querySelectorAll('.fresco-dot.drop-target').forEach(d=>d.classList.remove('drop-target'));
+      const td=el?.closest?.('.fresco-dot');
+      const tId=td?parseInt(td.dataset.id):null;
+      if(tId&&tId!==tableId&&!prepAbsorbedSet().has(tId)) td.classList.add('drop-target');
+    }
+  };
+  const onUp=up=>{
+    document.removeEventListener('pointermove',onMove,{capture:true});
+    ghost?.remove(); dot.classList.remove('dragging-src');
+    document.querySelectorAll('.fresco-dot.drop-target').forEach(d=>d.classList.remove('drop-target'));
+    if(dragging){
+      ghost={style:{visibility:''}};
+      const el=document.elementFromPoint(up.clientX,up.clientY);
+      const td=el?.closest?.('.fresco-dot');
+      const tId=td?parseInt(td.dataset.id):null;
+      if(tId&&tId!==tableId&&!prepAbsorbedSet().has(tId)){
+        showPrepCombineModal(tableId,tId);
+      }
+    } else {
+      showPrepAssignModal(tableId,[]);
+    }
+  };
+  document.addEventListener('pointermove',onMove,{capture:true});
+  document.addEventListener('pointerup',onUp,{once:true,capture:true});
+}
+
+function showPrepCombineModal(draggedId,targetId){
+  // targetId becomes the "group anchor" (it stays visible); draggedId gets absorbed
+  // Merge any existing combos: if target already has a combo, expand it
+  const existing=st.preassignments[targetId];
+  const draggedPa=getPa(draggedId);
+  // Collect all tables to be combined (anchor + its existing combo + dragged + dragged's combo)
+  const anchor=targetId;
+  let comboWith=(existing&&!existing.primaryTable&&existing.combinedWith||[]).map(Number);
+  if(!comboWith.includes(draggedId)){
+    // Bring in dragged dot's own combo members too
+    if(draggedPa&&draggedPa.isPrimary&&draggedPa.combinedWith){
+      draggedPa.combinedWith.map(Number).forEach(id=>{ if(id!==anchor&&!comboWith.includes(id)) comboWith.push(id); });
+    }
+    comboWith.push(draggedId);
+  }
+  // Now show assign modal for this combined group
+  showPrepAssignModal(anchor, comboWith);
+}
+
+function showPrepAssignModal(tableId,combinedWith){
+  const allTables=[tableId,...(combinedWith||[])].map(Number);
+  const totalCap=allTables.reduce((s,id)=>s+(TABLE_CAPS[id]||4),0);
+  const tableDesc=allTables.length>1?`Tables ${allTables.join(' + ')} combined → ${totalCap}-top`:`Table ${tableId} (${TABLE_CAPS[tableId]||4}-top)`;
+  document.getElementById('pa-modal-title').textContent=allTables.length>1?'COMBINE & ASSIGN':'ASSIGN TABLE';
+  document.getElementById('pa-table-info').innerHTML=`<strong>${tableDesc}</strong>`;
+  // Which resIds are already assigned elsewhere
+  const myResId=st.preassignments[tableId]?.resId;
+  const assignedElsewhere=new Set(Object.entries(st.preassignments||{})
+    .filter(([tid,pa])=>Number(tid)!==tableId&&pa.resId&&pa.resId!==myResId&&!pa.primaryTable)
+    .map(([,pa])=>pa.resId));
+  const rows=Object.entries(st.reservations||{})
+    .filter(([rid])=>!assignedElsewhere.has(rid))
+    .map(([rid,r])=>({rid,r,pax:paxOf(r)}))
+    .sort((a,b)=>b.pax-a.pax);
+  const cw2=JSON.stringify(combinedWith||[]);
+  const list=rows.map(({rid,r,pax})=>{
+    const slack=totalCap-pax;
+    const fc=slack<0?'fit-warn':slack===0?'fit-good':'fit-ok';
+    const label=slack<0?`⚠ ×${pax}`:`×${pax}`;
+    const isCurrent=rid===myResId;
+    return `<button class="pa-row${isCurrent?' pa-current':''}" onclick="confirmPreassign(${tableId},${cw2},'${rid}')"><span class="pa-name">${esc(r.name||'—')}<span style="color:var(--dim);font-size:10px"> · ${esc(r.stateroom||'')}</span>${isCurrent?'<span style="color:var(--gold);font-size:9px;margin-left:4px">★ current</span>':''}</span><span class="pa-size ${fc}">${label}</span></button>`;
+  });
+  // Clear option if already assigned
+  const clearBtn=myResId?`<button class="pa-row clear-row" onclick="clearPreassignment(${tableId})"><span class="pa-name">✕ Remove assignment</span></button>`:'';
+  document.getElementById('pa-party-list').innerHTML=list.length?list.join('')+clearBtn:'<div class="pa-empty">No reservations in this event yet.</div>'+clearBtn;
+  // Store context
+  document.getElementById('pa-overlay').dataset.tid=tableId;
+  document.getElementById('pa-overlay').dataset.cw=cw2;
+  document.getElementById('pa-overlay').classList.add('open');
+}
+
+function closePaModal(){ document.getElementById('pa-overlay').classList.remove('open'); }
+
+async function confirmPreassign(tableId,combinedWith,resId){
+  closePaModal();
+  const cw=(combinedWith||[]).map(Number);
+  // Clear any old preassignment on the secondary tables being absorbed
+  const oldPaAtTarget=st.preassignments[tableId];
+  const oldCw=(oldPaAtTarget&&!oldPaAtTarget.primaryTable&&oldPaAtTarget.combinedWith||[]).map(Number);
+  // Remove old secondaries that are no longer in the new combo
+  const removedSecondaries=oldCw.filter(id=>!cw.includes(id));
+  // Write primary
+  const rec={resId};
+  if(cw.length) rec.combinedWith=cw;
+  const writes={};
+  writes[tableId]=rec;
+  // Clear absorbed secondaries that previously had their own records
+  for(const sid of cw){
+    // If secondary had its own primary record, remove it
+    if(st.preassignments[sid]&&!st.preassignments[sid].primaryTable){
+      writes[sid]=null; // delete
+    }
+  }
+  for(const sid of removedSecondaries){
+    if(st.preassignments[sid]?.primaryTable) writes[sid]=null;
+  }
+  await db.ref(`${ROOT}/events/${st.currentId}/preassignments`).update(writes);
+  const res=st.reservations[resId];
+  const tables=[tableId,...cw];
+  toast(`Table${tables.length>1?'s '+tables.join('+'): ' '+tableId} → ${esc(res?.name||'guest')}`,'ok');
+}
+
+async function clearPreassignment(tableId){
+  closePaModal();
+  const pa=st.preassignments[tableId];
+  if(!pa) return;
+  const delKeys={[tableId]:null};
+  // Also remove secondary markers if any
+  (pa.combinedWith||[]).forEach(id=>{if(st.preassignments[id]?.primaryTable) delKeys[id]=null;});
+  await db.ref(`${ROOT}/events/${st.currentId}/preassignments`).update(delKeys);
+  toast('Pre-assignment cleared');
+}
+
+async function clearAllPreassignments(){
+  if(!st.currentId) return;
+  if(!confirm('Clear ALL table pre-assignments for this event?')) return;
+  await db.ref(`${ROOT}/events/${st.currentId}/preassignments`).remove();
+  toast('All pre-assignments cleared');
+}
+
+async function autoArrange(){
+  if(!st.currentId){ toast('No event loaded','err'); return; }
+  const assignedResIds=new Set(Object.values(st.preassignments||{}).filter(p=>!p.primaryTable&&p.resId).map(p=>p.resId));
+  const usedTables=new Set(Object.entries(st.preassignments||{})
+    .filter(([,p])=>!p.primaryTable).flatMap(([tid,p])=>[Number(tid),...(p.combinedWith||[]).map(Number)]));
+  const parties=Object.entries(st.reservations||{})
+    .filter(([rid])=>!assignedResIds.has(rid))
+    .map(([rid,r])=>({rid,r,pax:paxOf(r)}))
+    .sort((a,b)=>b.pax-a.pax);
+  if(!parties.length){ toast('All parties already assigned','ok'); return; }
+  const writes={};
+  for(const{rid,r,pax} of parties){
+    let best=null,bestCombo=null,bestSlack=Infinity;
+    for(let i=1;i<=31;i++){
+      if(usedTables.has(i)) continue;
+      const cap=TABLE_CAPS[i]||4;
+      if(cap>=pax&&cap-pax<bestSlack){ bestSlack=cap-pax; best=i; }
+    }
+    if(!best){
+      // Try combining
+      for(let i=1;i<=31;i++){
+        if(usedTables.has(i)) continue;
+        const combo=findCombine(i,pax,usedTables);
+        if(combo){ best=i; bestCombo=combo; break; }
+      }
+    }
+    if(!best) continue;
+    const rec={resId:rid};
+    if(bestCombo) rec.combinedWith=bestCombo;
+    writes[best]=rec;
+    usedTables.add(best);
+    (bestCombo||[]).forEach(id=>usedTables.add(id));
+  }
+  if(!Object.keys(writes).length){ toast('No available tables for remaining parties','err'); return; }
+  await db.ref(`${ROOT}/events/${st.currentId}/preassignments`).update(writes);
+  toast(`Auto-arranged ${Object.keys(writes).length} assignment${Object.keys(writes).length!==1?'s':''}`, 'ok');
 }
 
 // ── SETTINGS ──
