@@ -162,26 +162,43 @@ select.em-input{cursor:pointer}
 .preview-table td:first-child{color:var(--gold2)}
 
 /* seating */
-#v-seating{overflow:hidden}
+#v-seating{overflow:hidden;position:relative}
 .seating-wrap{display:flex;height:calc(100% - 54px)}
-.guest-panel{width:290px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--b1);display:flex;flex-direction:column;overflow:hidden}
-.gp-search-wrap{padding:10px 10px 6px}
-.gp-search{width:100%;background:rgba(4,7,14,.8);border:1px solid var(--b2);color:var(--text);padding:8px 11px;border-radius:10px;font-family:inherit;font-size:11px;outline:none;transition:border-color .15s}
-.gp-search:focus{border-color:var(--gold)}
+/* drawer */
+.gp-drawer{position:absolute;top:54px;right:-320px;width:300px;height:calc(100% - 54px);background:var(--panel);border-left:1px solid var(--b1);display:flex;flex-direction:column;z-index:50;transition:right .25s cubic-bezier(.4,0,.2,1);overflow:hidden}
+.gp-drawer.open{right:0}
+.gp-overlay{position:absolute;inset:0;background:rgba(4,7,14,.5);z-index:49;opacity:0;pointer-events:none;transition:opacity .25s;top:54px}
+.gp-overlay.open{opacity:1;pointer-events:auto}
+.gp-toggle{position:absolute;top:10px;right:10px;background:rgba(23,32,53,.85);border:1px solid var(--b2);color:var(--text);cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1.5px;padding:7px 13px;border-radius:8px;z-index:10;transition:all .15s}
+.gp-toggle:hover,.gp-toggle.active{border-color:var(--gold);color:var(--gold)}
+.gp-toggle.active{background:rgba(201,168,76,.1)}
+.gp-drw-head{display:flex;align-items:center;padding:10px 12px 8px;border-bottom:1px solid var(--b1);flex-shrink:0}
+.gp-drw-title{font-size:10px;letter-spacing:2px;color:var(--gold2);flex:1}
+.gp-close{background:none;border:none;color:var(--dim);cursor:pointer;font-size:17px;line-height:1;padding:2px 4px}
+.gp-close:hover{color:var(--text)}
 .gp-stats{padding:0 10px 6px;font-size:9px;color:var(--dim);letter-spacing:1px}
 .gp-list{flex:1;overflow-y:auto;padding:2px 7px 10px}
-.guest-item{border-radius:9px;padding:9px 30px 9px 10px;margin-bottom:4px;cursor:pointer;transition:all .15s;position:relative;border:1px solid transparent}
-.guest-item.unseated{background:rgba(23,32,53,.4)}
-.guest-item.seated{background:rgba(9,14,25,.4);opacity:.55}
-.guest-item:hover{border-color:var(--b2);background:rgba(37,54,80,.4);opacity:1}
-.guest-item.selected{border-color:var(--gold);background:rgba(201,168,76,.08);opacity:1}
+/* party rows */
+.guest-party{margin-bottom:3px;border-radius:9px;overflow:hidden}
+.gi-header{display:flex;align-items:center;padding:8px 10px 8px 6px;cursor:pointer;gap:5px;border:1px solid transparent;border-radius:9px;transition:all .15s}
+.guest-party.unseated .gi-header{background:rgba(23,32,53,.4)}
+.guest-party.seated .gi-header{background:rgba(9,14,25,.4);opacity:.55}
+.guest-party.selected .gi-header{border-color:var(--gold);background:rgba(201,168,76,.08)!important;opacity:1}
+.gi-header:hover{background:rgba(37,54,80,.5)!important;opacity:1}
+.gi-chev{width:14px;font-size:10px;color:var(--dim);flex-shrink:0;user-select:none;text-align:center}
+.gi-chev-ph{width:14px;flex-shrink:0}
+.gi-info{flex:1;min-width:0}
 .gi-name{font-size:11px;color:var(--text)}
 .gi-meta{font-size:9px;color:var(--dim);margin-top:1px}
-.gi-table{font-size:9px;color:var(--green);margin-top:1px}
-.gi-status{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%}
+.gi-table{font-size:9px;color:var(--green);white-space:nowrap;flex-shrink:0}
+.gi-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .gi-status.empty{background:var(--b2)}
 .gi-status.seated-s{background:var(--green)}
 .gi-status.selected-s{background:var(--gold);box-shadow:0 0 6px var(--gold)}
+.gi-guests{background:rgba(4,7,14,.35);padding:2px 0 4px 26px}
+.gi-guest-row{display:flex;align-items:center;gap:8px;padding:3px 10px 3px 0;font-size:10px}
+.gi-sub-name{color:var(--mid);flex:1}
+.gi-sub-room{color:var(--dim);font-size:9px;white-space:nowrap}
 .selected-bar{padding:9px 10px;border-top:1px solid var(--b1);flex-shrink:0;font-size:10px;min-height:42px;display:flex;align-items:center;gap:6px}
 .sb-name{color:var(--gold2);font-weight:500}
 .sb-hint{color:var(--dim)}
@@ -374,23 +391,30 @@ select.em-input{cursor:pointer}
     <div class="topbar-title" id="seat-title">SEATING</div>
     <div class="topbar-meta" id="seat-stats">0 / 0 seated</div>
   </div>
-  <div class="seating-wrap">
-    <div class="guest-panel">
-      <div class="gp-search-wrap">
-        <input type="search" class="gp-search" id="gp-search" placeholder="Name or stateroom…" oninput="renderGuestPanel()">
-      </div>
-      <div class="gp-stats" id="gp-stats">0 unassigned</div>
-      <div class="gp-list" id="gp-list"></div>
-      <div class="selected-bar" id="selected-bar">
-        <span class="sb-hint" id="sb-text">Tap a guest to select</span>
-      </div>
+  <!-- Guest drawer -->
+  <div class="gp-overlay" id="gp-overlay" onclick="toggleGuestDrawer()"></div>
+  <div class="gp-drawer" id="gp-drawer">
+    <div class="gp-drw-head">
+      <span class="gp-drw-title">GUESTS</span>
+      <button class="gp-close" onclick="toggleGuestDrawer()">✕</button>
     </div>
-    <div class="map-panel">
+    <div class="gp-search-wrap" style="padding:8px 10px 4px">
+      <input type="search" class="gp-search" id="gp-search" placeholder="Name or stateroom…" oninput="renderGuestPanel()" style="width:100%;background:rgba(4,7,14,.8);border:1px solid var(--b2);color:var(--text);padding:7px 10px;border-radius:9px;font-family:inherit;font-size:11px;outline:none">
+    </div>
+    <div class="gp-stats" id="gp-stats">0 unassigned</div>
+    <div class="gp-list" id="gp-list"></div>
+    <div class="selected-bar" id="selected-bar">
+      <span class="sb-hint">Tap a guest to select</span>
+    </div>
+  </div>
+  <div class="seating-wrap">
+    <div class="map-panel" style="flex:1">
       <div class="map-scroll">
         <div class="map-inner" style="min-height:100%;display:flex;align-items:flex-start;justify-content:center;padding:12px">
           <div class="map-container" id="map-container"></div>
         </div>
       </div>
+      <button class="gp-toggle" id="gp-toggle" onclick="toggleGuestDrawer()">☰ GUESTS</button>
       <div class="calib-bar" id="calib-bar">
         <span>⚙ CALIBRATION MODE — drag dots to position</span>
         <button class="tb-btn gold" onclick="stopCalibration()">SAVE & EXIT</button>
@@ -1319,21 +1343,58 @@ function relPrompt(rid){
 }
 
 // ── GUEST PANEL ──
+function toggleGuestDrawer(){
+  const drawer=document.getElementById('gp-drawer');
+  const overlay=document.getElementById('gp-overlay');
+  const btn=document.getElementById('gp-toggle');
+  const open=drawer.classList.toggle('open');
+  overlay.classList.toggle('open',open);
+  btn?.classList.toggle('active',open);
+}
+
+function toggleParty(id){
+  if(!st._gpOpen) st._gpOpen={};
+  st._gpOpen[id]=!st._gpOpen[id];
+  renderGuestPanel();
+}
+
 function renderGuestPanel(){
   const q=(document.getElementById('gp-search')?.value||'').toLowerCase();
-  const all=Object.entries(st.reservations).map(([id,r])=>({id,...r,seated:!!st.seating[id]}));
-  const fil=q?all.filter(r=>(r.name||'').toLowerCase().includes(q)||(r.stateroom||'').toLowerCase().includes(q)):all;
+  if(!st._gpOpen) st._gpOpen={};
+  const all=Object.entries(st.reservations).map(([id,r])=>({
+    id,...r,
+    seated:!!st.seating[id],
+    guests:(r.guests||[]).map(g=>typeof g==='string'?{name:g,stateroom:r.stateroom}:g)
+  }));
+  const fil=q?all.filter(r=>
+    (r.name||'').toLowerCase().includes(q)||
+    (r.stateroom||'').toLowerCase().includes(q)||
+    r.guests.some(g=>(g.name||'').toLowerCase().includes(q)||(g.stateroom||'').toLowerCase().includes(q))
+  ):all;
   fil.sort((a,b)=>a.seated!==b.seated?a.seated?1:-1:(a.stateroom||'').localeCompare(b.stateroom||''));
-  const unCnt=all.filter(r=>!r.seated).length;
+  const unCnt=all.reduce((s,r)=>s+(!r.seated?(r.guests.length||1):0),0);
   document.getElementById('gp-stats').textContent=unCnt+' unassigned';
   const isSel=id=>id===st.selectedResId;
   document.getElementById('gp-list').innerHTML=fil.map(r=>{
     const tid=st.seating[r.id]?.tableId;
-    return `<div class="guest-item ${r.seated?'seated':'unseated'}${isSel(r.id)?' selected':''}" onclick="selGuest('${r.id}')">
-      <div class="gi-name">${esc(r.name||'—')}</div>
-      <div class="gi-meta">${esc(r.stateroom||'—')} · party of ${r.partySize||1}</div>
-      ${tid?`<div class="gi-table">Table ${tid}</div>`:''}
-      <div class="gi-status ${r.seated?'seated-s':(isSel(r.id)?'selected-s':'empty')}"></div>
+    const hasGuests=r.guests.length>1;
+    const open=!!st._gpOpen[r.id];
+    const guestRows=hasGuests&&open?r.guests.map(g=>`
+      <div class="gi-guest-row">
+        <span class="gi-sub-name">${esc(g.name)}</span>
+        <span class="gi-sub-room">${esc(g.stateroom||r.stateroom)}</span>
+      </div>`).join(''):'';
+    return `<div class="guest-party ${r.seated?'seated':'unseated'}${isSel(r.id)?' selected':''}">
+      <div class="gi-header" onclick="selGuest('${r.id}')">
+        ${hasGuests?`<span class="gi-chev" onclick="event.stopPropagation();toggleParty('${r.id}')">${open?'▾':'▸'}</span>`:`<span class="gi-chev-ph"></span>`}
+        <div class="gi-info">
+          <div class="gi-name">${esc(r.name||'—')}</div>
+          <div class="gi-meta">${esc(r.stateroom||'—')} · ${r.guests.length||r.partySize||1} guests</div>
+        </div>
+        ${tid?`<div class="gi-table">Table ${tid}</div>`:''}
+        <div class="gi-status ${r.seated?'seated-s':(isSel(r.id)?'selected-s':'empty')}"></div>
+      </div>
+      ${guestRows?`<div class="gi-guests">${guestRows}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -1354,8 +1415,10 @@ function updateSelBar(){
 }
 
 function updateSeatStats(){
-  const total=Object.keys(st.reservations).length;
-  const seated=Object.keys(st.seating||{}).length;
+  const all=Object.entries(st.reservations);
+  const guestCount=r=>(r.guests||[]).length||r.partySize||1;
+  const total=all.reduce((s,[,r])=>s+guestCount(r),0);
+  const seated=all.filter(([id])=>st.seating[id]).reduce((s,[,r])=>s+guestCount(r),0);
   document.getElementById('seat-stats').textContent=seated+' / '+total+' seated';
 }
 
