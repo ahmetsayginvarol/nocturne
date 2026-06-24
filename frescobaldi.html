@@ -215,6 +215,8 @@ select.em-input{cursor:pointer}
 .fresco-dot.has-guests .dc{color:#3a1800}
 .fresco-dot.target-hint{border-color:var(--teal);background:rgba(45,212,191,.85);animation:dpulse .9s ease-in-out infinite}
 @keyframes dpulse{0%,100%{box-shadow:0 0 0 0 rgba(45,212,191,.9)}50%{box-shadow:0 0 0 10px rgba(45,212,191,.25)}}
+.fresco-dot.combine-hint{border-color:var(--teal);border-style:dashed;background:rgba(45,212,191,.18)}
+.fresco-dot.combine-hint .dn{color:var(--teal)}
 .fresco-dot.focus-table{border-color:var(--gold)!important;background:rgba(201,168,76,.95)!important;animation:dfocus 1.2s ease-in-out infinite;z-index:10}
 @keyframes dfocus{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,1)}50%{box-shadow:0 0 0 18px rgba(201,168,76,.35)}}
 .fresco-dot.dimmed{opacity:.18;pointer-events:none}
@@ -574,53 +576,52 @@ const TABLE_CAPS = {
   29:4,30:4,31:4
 };
 
-// Returns empty tables sorted nearest-first, excluding occupied + absorbed + the source table.
-// "Occupied" means: directly seated, OR absorbed into another seating's combinedWith.
-function nearbyAvailable(tid){
-  const occupied=new Set();
+// Effective head count for a reservation (new guest model, else legacy partySize).
+function paxOf(r){ return (r&&r.guests&&r.guests.length)||(r&&r.partySize)||1; }
+
+// Dot position (calibrated override wins over default).
+function dotPos(id){ return {...DOTS_DEFAULT[id],...(st.dots[id]||{})}; }
+
+// Set of table ids currently in use: directly seated OR absorbed into a combo.
+function occupiedSet(){
+  const s=new Set();
   for(const rec of Object.values(st.seating||{})){
-    if(rec.tableId) occupied.add(rec.tableId);
-    if(rec.combinedWith) rec.combinedWith.forEach(id=>occupied.add(id));
+    if(rec.tableId) s.add(rec.tableId);
+    if(rec.combinedWith) rec.combinedWith.forEach(id=>s.add(id));
   }
-  const pos0={...DOTS_DEFAULT[tid],...(st.dots[tid]||{})};
-  const rows=[];
-  for(let i=1;i<=31;i++){
-    if(i===tid||occupied.has(i)) continue;
-    const p={...DOTS_DEFAULT[i],...(st.dots[i]||{})};
-    rows.push({id:i, dist:Math.hypot(p.x-pos0.x, p.y-pos0.y)});
-  }
-  rows.sort((a,b)=>a.dist-b.dist);
-  // Cap at ~22% distance — avoids suggesting tables across the room
-  return rows.filter(r=>r.dist<=22);
+  return s;
 }
 
-// Returns the combo array [tableId, ...] needed alongside `tid` to seat `partySize`,
-// null if tid already fits, false if no valid combo exists nearby.
+// Returns the additional table ids [..] to combine with `tid` to seat `partySize`.
+// Grows a tight cluster of the NEAREST available tables (so 3 adjacent two-tops
+// beat one six-top across the room), supporting any number of tables.
+//   null  → tid already fits on its own
+//   false → no viable nearby combination
+const COMBINE_STEP_MAX = 20;  // max % distance from cluster to absorb a neighbour
+const COMBINE_MAX_TABLES = 6; // sanity cap on tables in one combination
 function findCombine(tid, partySize){
   const cap=TABLE_CAPS[tid]||4;
   if(cap>=partySize) return null;
-  const needed=partySize-cap;
-  const avail=nearbyAvailable(tid);
-  if(!avail.length) return false;
+  const occ=occupiedSet();
+  const pool=[];
+  for(let i=1;i<=31;i++){ if(i===tid||occ.has(i)) continue; pool.push(i); }
 
-  // Single-table solution: among those that cover the deficit,
-  // prefer best fit (smallest cap = least waste), break ties by proximity.
-  const singles=avail.filter(t=>TABLE_CAPS[t.id]>=needed);
-  if(singles.length){
-    singles.sort((a,b)=>TABLE_CAPS[a.id]-TABLE_CAPS[b.id]||a.dist-b.dist);
-    return [singles[0].id];
-  }
-
-  // Two-table solution: try all nearby pairs, pick the one with
-  // smallest combined distance from the primary table.
-  let bestPair=null, bestDist=Infinity;
-  for(let a=0;a<avail.length;a++) for(let b=a+1;b<avail.length;b++){
-    if(TABLE_CAPS[avail[a].id]+TABLE_CAPS[avail[b].id]>=needed){
-      const d=avail[a].dist+avail[b].dist;
-      if(d<bestDist){bestDist=d;bestPair=[avail[a].id,avail[b].id];}
+  const chosen=[], cluster=[dotPos(tid)];
+  let total=cap;
+  while(total<partySize && pool.length && chosen.length<COMBINE_MAX_TABLES-1){
+    // pick the available table nearest to ANY table already in the cluster
+    let bestIdx=-1, bestD=Infinity;
+    for(let i=0;i<pool.length;i++){
+      const p=dotPos(pool[i]);
+      let dmin=Infinity;
+      for(const c of cluster){ const d=Math.hypot(p.x-c.x,p.y-c.y); if(d<dmin) dmin=d; }
+      if(dmin<bestD){ bestD=dmin; bestIdx=i; }
     }
+    if(bestIdx<0 || bestD>COMBINE_STEP_MAX) break; // nearest is too far — stop
+    const pick=pool.splice(bestIdx,1)[0];
+    chosen.push(pick); cluster.push(dotPos(pick)); total+=TABLE_CAPS[pick]||4;
   }
-  return bestPair||false;
+  return total>=partySize ? chosen : false;
 }
 
 // ── DOT DEFAULTS (x%, y% from top-left of 1228×1466 map) ──
@@ -1243,7 +1244,7 @@ function renderDots(){
     dot.style.left=pos.x+'%'; dot.style.top=pos.y+'%';
     dot.style.width='34px'; dot.style.height='34px'; dot.style.borderRadius='50%';
     const gs=occ[i]||[];
-    const cvr=gs.reduce((s,r)=>s+(r.partySize||1),0);
+    const cvr=gs.reduce((s,r)=>s+paxOf(r),0);
     dot.classList.toggle('has-guests',gs.length>0);
     dot.querySelector('.dc').textContent=gs.length?cvr+' cvr':'';
     // reshape into pill if this dot is the primary of a combination
@@ -1262,15 +1263,16 @@ function renderDots(){
     const sel=st.selectedResId;
     const seatedAt=sel?st.seating[sel]?.tableId:null;
     const alreadyHere=sel&&seatedAt===i;
-    dot.classList.remove('target-hint','focus-table','dimmed');
+    dot.classList.remove('target-hint','combine-hint','focus-table','dimmed');
     if(seatedAt){
       // Selected guest is already seated: glow their table, dim everything else
       if(i===seatedAt) dot.classList.add('focus-table');
       else dot.classList.add('dimmed');
     } else if(sel&&!alreadyHere&&gs.length===0){
-      const partySize=st.reservations[sel]?.partySize||1;
+      const pax=paxOf(st.reservations[sel]);
       const cap=TABLE_CAPS[i]||4;
-      if(cap>=partySize) dot.classList.add('target-hint');
+      if(cap>=pax) dot.classList.add('target-hint');           // fits on its own
+      else if(findCombine(i,pax)) dot.classList.add('combine-hint'); // can anchor a combo
     }
   }
 }
@@ -1281,16 +1283,14 @@ function handleDotClick(tid){
   if(st.selectedResId&&st.seating[st.selectedResId]?.tableId){
     showDotPop(tid); return;
   }
-  const absorbedCheck=new Set();
-  for(const rec of Object.values(st.seating||{})) if(rec.combinedWith) rec.combinedWith.forEach(id=>absorbedCheck.add(id));
-  const occupied=Object.values(st.seating||{}).some(rec=>rec.tableId===tid)||absorbedCheck.has(tid);
+  const occupied=occupiedSet().has(tid);
   if(st.selectedResId&&!occupied){
     const r=st.reservations[st.selectedResId];
-    const partySize=r?.partySize||1;
+    const partySize=paxOf(r);
     const cap=TABLE_CAPS[tid]||4;
     const doSeat=async(combinedWith)=>{
       const rec={tableId:tid,seatedAt:Date.now(),seatedBy:DID};
-      if(combinedWith) rec.combinedWith=combinedWith;
+      if(combinedWith&&combinedWith.length) rec.combinedWith=combinedWith;
       await db.ref(`${ROOT}/events/${st.currentId}/seating/${st.selectedResId}`).set(rec);
       st.selectedResId=null;
       updateSelBar();renderGuestPanel();renderDots();
@@ -1302,13 +1302,14 @@ function handleDotClick(tid){
     } else {
       const combo=findCombine(tid,partySize);
       if(combo){
-        const comboTotal=cap+combo.reduce((s,id)=>s+TABLE_CAPS[id],0);
+        const tables=[tid,...combo];
+        const comboTotal=tables.reduce((s,id)=>s+(TABLE_CAPS[id]||4),0);
         const comboDesc=combo.map(id=>`Table ${id} (${TABLE_CAPS[id]}-top)`).join(' + ');
         confirm2('COMBINE TABLES',
-          `Table ${tid} is a ${cap}-top — not enough for <strong>${esc(r?.name||'Guest')}</strong>'s party of ${partySize}.<br><br>Suggest combining with ${comboDesc} → <strong>${comboTotal} covers</strong>. Seat at Table ${tid}?`,
-          async()=>{ await doSeat(combo); toast(`Tables ${[tid,...combo].join('+')} combined — ${esc(r?.name||'Guest')} seated`, 'ok'); });
+          `Table ${tid} is a ${cap}-top — not enough for <strong>${esc(r?.name||'Guest')}</strong>'s party of ${partySize}.<br><br>Combine ${tables.length} tables: Table ${tid} + ${comboDesc} → <strong>${comboTotal} covers</strong>. Seat here?`,
+          async()=>{ await doSeat(combo); toast(`Tables ${tables.join('+')} combined — ${esc(r?.name||'Guest')} seated`, 'ok'); });
       } else {
-        toast(`Table ${tid} seats ${cap} — not enough for party of ${partySize} and no nearby tables to combine`,'err');
+        toast(`Party of ${partySize} won't fit — no cluster of nearby open tables is large enough. Free up adjacent tables or pick another area.`,'err');
       }
     }
   } else {
@@ -1323,7 +1324,7 @@ function showDotPop(tid){
   const pop=document.createElement('div');
   pop.className='dot-popover';
   pop.innerHTML=`<div class="dp-title">TABLE ${tid}</div>`+(seated.length
-    ?seated.map(r=>`<div class="dp-guest-row"><span>${esc(r.name)} <span style="color:var(--dim)">· ${esc(r.stateroom)}</span>${r.partySize>1?` <span style="color:var(--mid)">×${r.partySize}</span>`:''}</span><button class="dp-release" onclick="relPrompt('${r.rid}')">release</button></div>`).join('')
+    ?seated.map(r=>{const pax=paxOf(r);return `<div class="dp-guest-row"><span>${esc(r.name)} <span style="color:var(--dim)">· ${esc(r.stateroom)}</span>${pax>1?` <span style="color:var(--mid)">×${pax}</span>`:''}</span><button class="dp-release" onclick="relPrompt('${r.rid}')">release</button></div>`;}).join('')
     :'<div class="dp-empty">Empty</div>');
   const dr=dot.getBoundingClientRect(),mr=document.getElementById('map-container').getBoundingClientRect();
   let lft=dr.right-mr.left+8,tp=dr.top-mr.top-8;
