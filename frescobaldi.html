@@ -185,6 +185,22 @@ select.em-input{cursor:pointer}
 .gm-cancel{background:var(--elem-bg);border:1px solid var(--b2);border-radius:10px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:11px;padding:15px 22px}
 .row-edit-btn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;padding:3px 6px;border-radius:4px;transition:color .12s}
 .row-edit-btn:hover{color:var(--gold2)}
+/* Party members section */
+.gm-section-hd{display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--b1)}
+.gm-section-lbl{font-size:8.5px;letter-spacing:1.8px;color:var(--dim);text-transform:uppercase}
+.gm-party-count{font-size:10px;color:var(--mid);background:var(--elem-bg);padding:2px 9px;border-radius:20px}
+.gm-member-row{display:grid;grid-template-columns:auto 1fr 1fr 90px 28px;gap:7px;align-items:center;padding:8px 0;border-bottom:1px solid var(--row-sep)}
+.gm-member-row:last-child{border-bottom:none}
+.gm-member-idx{font-size:9px;color:var(--dim);font-family:'DM Mono',monospace;text-align:center;min-width:18px}
+.gm-member-title{display:flex;gap:4px;flex-wrap:wrap;grid-column:1/-1;padding-bottom:4px}
+.gm-tc{background:var(--elem-bg);border:1px solid var(--b2);border-radius:6px;color:var(--mid);cursor:pointer;font-size:11px;padding:5px 11px;transition:all .14s;line-height:1;font-family:inherit}
+.gm-tc.sel{background:rgba(201,168,76,.14);border-color:var(--gold);color:var(--gold2)}
+.gm-mini{width:100%;background:var(--inp-bg);border:1px solid var(--b2);border-radius:8px;color:var(--text);font-family:inherit;font-size:12px;padding:9px 10px;outline:none;transition:border-color .15s;box-sizing:border-box;min-width:0}
+.gm-mini:focus{border-color:var(--gold)}
+.gm-del-member{background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;line-height:1;padding:4px;transition:color .14s;flex-shrink:0}
+.gm-del-member:hover{color:var(--s2)}
+.gm-add-member{display:flex;align-items:center;gap:6px;margin-top:12px;background:none;border:1px dashed var(--b2);border-radius:9px;color:var(--mid);cursor:pointer;font-family:inherit;font-size:11px;padding:10px 16px;width:100%;transition:all .15s;letter-spacing:.5px}
+.gm-add-member:hover{border-color:var(--gold);color:var(--gold)}
 .modal-overlay.open{display:flex}
 .modal{background:var(--modal-bg);border:1px solid var(--b2);border-radius:18px;width:100%;max-width:740px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.65)}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
@@ -561,7 +577,13 @@ select.em-input{cursor:pointer}
         <button class="title-chip" onclick="selTitle(this,'Mrs.')">Mrs.</button>
         <button class="title-chip" onclick="selTitle(this,'Ms.')">Ms.</button>
         <button class="title-chip" onclick="selTitle(this,'Dr.')">Dr.</button>
+        <button class="title-chip" onclick="selTitle(this,'Mstr.')">Mstr.</button>
+        <button class="title-chip" onclick="selTitle(this,'Miss')">Miss</button>
       </div>
+    </div>
+    <div class="gm-row">
+      <div class="gm-lbl">First Name</div>
+      <input class="gm-input" id="gf-firstname" type="text" placeholder="e.g. Sarah" autocomplete="off" autocorrect="off" spellcheck="false">
     </div>
     <div class="gm-row">
       <div class="gm-lbl">Last Name</div>
@@ -572,14 +594,6 @@ select.em-input{cursor:pointer}
       <input class="gm-input" id="gf-stateroom" type="text" inputmode="numeric" placeholder="e.g. 6406" autocomplete="off">
     </div>
     <div class="gm-row">
-      <div class="gm-lbl">Party Size</div>
-      <div class="party-row">
-        <button class="ps-btn" onclick="adjParty(-1)">−</button>
-        <div class="ps-val" id="gf-party">1</div>
-        <button class="ps-btn" onclick="adjParty(1)">+</button>
-      </div>
-    </div>
-    <div class="gm-row">
       <div class="gm-lbl">Dietary Needs</div>
       <input class="gm-input" id="gf-dietary" type="text" placeholder="Allergies, preferences…" autocomplete="off">
     </div>
@@ -587,6 +601,13 @@ select.em-input{cursor:pointer}
       <div class="gm-lbl">Notes</div>
       <input class="gm-input" id="gf-notes" type="text" placeholder="Optional note" autocomplete="off">
     </div>
+    <!-- Party members section -->
+    <div class="gm-section-hd">
+      <span class="gm-section-lbl">Party Members</span>
+      <span class="gm-party-count" id="gm-party-count">1 guest</span>
+    </div>
+    <div id="gm-members-list"></div>
+    <button class="gm-add-member" onclick="addPartyMember()">+ ADD PARTY MEMBER</button>
     <div class="gm-foot">
       <button class="gm-cancel" onclick="closeGuestForm()">CANCEL</button>
       <button class="gm-save" onclick="saveGuestForm()">SAVE GUEST</button>
@@ -1215,11 +1236,11 @@ function renderResTable(){
       <td><input class="cell-edit" value="${esc(r.notes||'')}" data-id="${id}" data-f="notes" placeholder="—" onblur="saveField(this)"></td>
       <td style="display:flex;gap:2px"><button class="row-edit-btn" onclick="openGuestForm('${id}')">✎</button><button class="del-btn" onclick="delRes('${id}')">✕</button></td>
     </tr>`;
-    const subRows=guests.slice(1).map(g=>`<tr class="guest-sub-row">
+    const subRows=guests.slice(1).map(g=>`<tr class="guest-sub-row" style="cursor:pointer" onclick="openGuestForm('${id}')">
       <td></td>
-      <td style="padding-left:22px;font-size:10px;color:var(--dim)">↳ ${esc(g.name)}</td>
+      <td style="padding-left:22px;font-size:10px;color:var(--mid)">↳ ${esc(g.name)}</td>
       <td style="font-size:10px;color:var(--dim)">${esc(g.stateroom)}</td>
-      <td colspan="4"></td>
+      <td colspan="4" style="font-size:9px;color:var(--dim)">✎ edit party</td>
     </tr>`).join('');
     return mainRow+subRows;
   }).join('')+`<tr><td colspan="7"><button class="add-row-btn" onclick="openGuestForm()">+ ADD GUEST</button></td></tr>`;
@@ -1240,41 +1261,64 @@ function saveField(inp){
   },400);
 }
 
-let _gfId=null,_gfParty=1,_gfTitle='';
+let _gfId=null,_gfTitle='',_gfMembers=[];
+
+function _ttlCase(s){ return s?s.charAt(0).toUpperCase()+s.slice(1).toLowerCase():''; }
+function _parseName(r){
+  const knownTitles=['Mr.','Mrs.','Ms.','Dr.','Mstr.','Miss'];
+  const parts=(r.name||'').trim().split(/\s+/);
+  let title='',firstName='',lastName='';
+  if(knownTitles.includes(parts[0])){ title=parts[0]; parts.shift(); }
+  lastName=r.lastName?_ttlCase(r.lastName):(parts.pop()||'');
+  firstName=r.firstName||parts.join(' ')||'';
+  return {title,firstName,lastName};
+}
 
 function openGuestForm(id=null){
-  _gfId=id; _gfTitle=''; _gfParty=1;
+  _gfId=id; _gfTitle=''; _gfMembers=[];
   document.getElementById('gm-head-title').textContent=id?'EDIT GUEST':'ADD GUEST';
   document.querySelectorAll('.title-chip').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('gf-firstname').value='';
   document.getElementById('gf-lastname').value='';
   document.getElementById('gf-stateroom').value='';
   document.getElementById('gf-dietary').value='';
   document.getElementById('gf-notes').value='';
-  document.getElementById('gf-party').textContent='1';
   if(id){
     const r=st.reservations[id]||{};
-    const parts=(r.name||'').split(' ');
-    const knownTitles=['Mr.','Mrs.','Ms.','Dr.'];
-    if(knownTitles.includes(parts[0])){
-      _gfTitle=parts[0];
-      document.querySelectorAll('.title-chip').forEach(c=>{if(c.textContent===_gfTitle)c.classList.add('sel');});
-      document.getElementById('gf-lastname').value=parts.slice(1).join(' ')||r.lastName||'';
-    } else {
-      document.getElementById('gf-lastname').value=r.name||r.lastName||'';
-    }
+    const {title,firstName,lastName}=_parseName(r);
+    _gfTitle=title;
+    if(title) document.querySelectorAll('.title-chip').forEach(c=>{if(c.textContent===title)c.classList.add('sel');});
+    document.getElementById('gf-firstname').value=firstName;
+    document.getElementById('gf-lastname').value=lastName;
     document.getElementById('gf-stateroom').value=r.stateroom||'';
     document.getElementById('gf-dietary').value=r.dietary||'';
     document.getElementById('gf-notes').value=r.notes||'';
-    _gfParty=r.partySize||1;
-    document.getElementById('gf-party').textContent=_gfParty;
+    const gs=(r.guests||[]).map(g=>typeof g==='string'?{name:g,stateroom:r.stateroom||'',lastName:'',title:'',firstName:''}:g);
+    if(gs.length>0){
+      _gfMembers=gs.slice(1).map(g=>{
+        const kn=['Mr.','Mrs.','Ms.','Dr.','Mstr.','Miss'];
+        const pts=(g.name||'').trim().split(/\s+/);
+        let t='',fn='',ln='';
+        if(kn.includes(pts[0])){t=pts[0];pts.shift();}
+        ln=g.lastName?_ttlCase(g.lastName):(pts.pop()||'');
+        fn=g.firstName||pts.join(' ')||'';
+        return {title:t,firstName:fn,lastName:ln,stateroom:g.stateroom||r.stateroom||''};
+      });
+      const declared=(r.partySize||1)-1;
+      while(_gfMembers.length<declared) _gfMembers.push({title:'',firstName:'',lastName:'',stateroom:r.stateroom||''});
+    } else {
+      const extra=Math.max(0,(r.partySize||1)-1);
+      for(let i=0;i<extra;i++) _gfMembers.push({title:'',firstName:'',lastName:'',stateroom:r.stateroom||''});
+    }
   }
+  renderPartyMembers();
   document.getElementById('guest-modal').classList.add('open');
-  setTimeout(()=>document.getElementById('gf-lastname').focus(),160);
+  setTimeout(()=>document.getElementById('gf-firstname').focus(),160);
 }
 
 function closeGuestForm(){
   document.getElementById('guest-modal').classList.remove('open');
-  _gfId=null;
+  _gfId=null; _gfMembers=[];
 }
 
 function selTitle(el,t){
@@ -1283,29 +1327,80 @@ function selTitle(el,t){
   el.classList.add('sel'); _gfTitle=t;
 }
 
-function adjParty(d){
-  _gfParty=Math.max(1,Math.min(20,_gfParty+d));
-  document.getElementById('gf-party').textContent=_gfParty;
+function renderPartyMembers(){
+  const total=1+_gfMembers.length;
+  document.getElementById('gm-party-count').textContent=total+' guest'+(total!==1?'s':'');
+  const titles=['Mr.','Mrs.','Ms.','Dr.','Mstr.','Miss'];
+  document.getElementById('gm-members-list').innerHTML=_gfMembers.map((m,i)=>`
+    <div class="gm-member-row" id="gm-mr-${i}">
+      <div class="gm-member-title">
+        <span class="gm-member-idx">\u2937 ${i+2}</span>
+        ${titles.map(t=>`<button class="gm-tc${m.title===t?' sel':''}" onclick="setMemberTitle(${i},'${t}',this)">${t}</button>`).join('')}
+        <button class="gm-del-member" onclick="removePartyMember(${i})" title="Remove member">\u2715</button>
+      </div>
+      <span></span>
+      <input class="gm-mini" data-mi="${i}" data-mf="firstName" value="${m.firstName||''}" placeholder="First name" autocorrect="off" spellcheck="false" oninput="syncMember(this)">
+      <input class="gm-mini" data-mi="${i}" data-mf="lastName" value="${m.lastName||''}" placeholder="Last name" autocorrect="off" spellcheck="false" oninput="syncMember(this)">
+      <input class="gm-mini" data-mi="${i}" data-mf="stateroom" value="${m.stateroom||''}" placeholder="Cabin" inputmode="numeric" oninput="syncMember(this)">
+    </div>`).join('');
+}
+
+function syncMember(inp){
+  const i=parseInt(inp.dataset.mi),f=inp.dataset.mf;
+  if(_gfMembers[i]) _gfMembers[i][f]=inp.value;
+}
+
+function setMemberTitle(i,t,el){
+  if(!_gfMembers[i]) return;
+  const already=_gfMembers[i].title===t;
+  _gfMembers[i].title=already?'':t;
+  const row=document.getElementById('gm-mr-'+i);
+  row?.querySelectorAll('.gm-tc').forEach(c=>c.classList.toggle('sel',c.textContent===_gfMembers[i].title));
+}
+
+function addPartyMember(){
+  const stateroom=document.getElementById('gf-stateroom').value.trim()||'';
+  document.querySelectorAll('[data-mi]').forEach(inp=>{ const mi=parseInt(inp.dataset.mi),mf=inp.dataset.mf; if(_gfMembers[mi]) _gfMembers[mi][mf]=inp.value; });
+  _gfMembers.push({title:'',firstName:'',lastName:'',stateroom});
+  renderPartyMembers();
+  setTimeout(()=>{ const row=document.getElementById('gm-mr-'+(_gfMembers.length-1)); row?.querySelector('.gm-mini')?.focus(); },60);
+}
+
+function removePartyMember(i){
+  document.querySelectorAll('[data-mi]').forEach(inp=>{ const mi=parseInt(inp.dataset.mi),mf=inp.dataset.mf; if(_gfMembers[mi]) _gfMembers[mi][mf]=inp.value; });
+  _gfMembers.splice(i,1);
+  renderPartyMembers();
 }
 
 async function saveGuestForm(){
   if(!st.currentId) return;
-  const raw=document.getElementById('gf-lastname').value.trim();
-  if(!raw){toast('Last name is required','err');return;}
-  const lastName=raw.charAt(0).toUpperCase()+raw.slice(1).toLowerCase();
-  const name=(_gfTitle?_gfTitle+' ':'')+lastName;
+  const rawLast=document.getElementById('gf-lastname').value.trim();
+  if(!rawLast){toast('Last name is required','err');return;}
+  const lastName=_ttlCase(rawLast);
+  const firstName=document.getElementById('gf-firstname').value.trim();
+  const name=[_gfTitle,firstName,lastName].filter(Boolean).join(' ');
+  const stateroom=document.getElementById('gf-stateroom').value.trim();
+  document.querySelectorAll('[data-mi]').forEach(inp=>{ const mi=parseInt(inp.dataset.mi),mf=inp.dataset.mf; if(_gfMembers[mi]) _gfMembers[mi][mf]=inp.value.trim(); });
+  const primaryGuest={name,firstName,lastName:rawLast.toUpperCase(),stateroom,title:_gfTitle};
+  const extraGuests=_gfMembers.map(m=>{
+    const ln=_ttlCase(m.lastName||'');
+    const fn=(m.firstName||'').trim();
+    const gname=[m.title,fn,ln].filter(Boolean).join(' ')||ln||fn||'Guest';
+    return {name:gname,firstName:fn,lastName:(m.lastName||'').toUpperCase(),stateroom:(m.stateroom||stateroom),title:m.title||''};
+  });
+  const guests=[primaryGuest,...extraGuests];
   const rec={
-    name, lastName:raw.toUpperCase(),
-    stateroom:document.getElementById('gf-stateroom').value.trim(),
-    partySize:_gfParty,
+    name, firstName, lastName:rawLast.toUpperCase(), stateroom,
+    partySize:guests.length,
     dietary:document.getElementById('gf-dietary').value.trim(),
     notes:document.getElementById('gf-notes').value.trim(),
-    funding:'', amount:0, serviceCharge:0
+    funding:'', amount:0, serviceCharge:0,
+    guests
   };
   const id=_gfId||db.ref().push().key;
   await db.ref(`${ROOT}/events/${st.currentId}/reservations/${id}`).set(rec);
   closeGuestForm();
-  toast((_gfId?'Updated':'Added')+' — '+name,'ok');
+  toast((_gfId?'Updated':'Added')+' \u2014 '+name,'ok');
 }
 
 async function delRes(id){
