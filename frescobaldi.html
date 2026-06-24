@@ -1269,8 +1269,14 @@ function _parseName(r){
   const parts=(r.name||'').trim().split(/\s+/);
   let title='',firstName='',lastName='';
   if(knownTitles.includes(parts[0])){ title=parts[0]; parts.shift(); }
-  lastName=r.lastName?_ttlCase(r.lastName):(parts.pop()||'');
-  firstName=r.firstName||parts.join(' ')||'';
+  if(r.lastName){
+    // lastName already stored — don't infer firstName from leftover parts (CSV only has last name)
+    lastName=_ttlCase(r.lastName);
+    firstName=r.firstName||'';
+  } else {
+    lastName=parts.pop()||'';
+    firstName=r.firstName||parts.join(' ')||'';
+  }
   return {title,firstName,lastName};
 }
 
@@ -1300,8 +1306,8 @@ function openGuestForm(id=null){
         const pts=(g.name||'').trim().split(/\s+/);
         let t='',fn='',ln='';
         if(kn.includes(pts[0])){t=pts[0];pts.shift();}
-        ln=g.lastName?_ttlCase(g.lastName):(pts.pop()||'');
-        fn=g.firstName||pts.join(' ')||'';
+        if(g.lastName){ ln=_ttlCase(g.lastName); fn=g.firstName||''; }
+        else { ln=pts.pop()||''; fn=g.firstName||pts.join(' ')||''; }
         return {title:t,firstName:fn,lastName:ln,stateroom:g.stateroom||r.stateroom||''};
       });
       const declared=(r.partySize||1)-1;
