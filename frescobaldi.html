@@ -1308,13 +1308,13 @@ function openGuestForm(id=null){
         if(kn.includes(pts[0])){t=pts[0];pts.shift();}
         if(g.lastName){ ln=_ttlCase(g.lastName); fn=g.firstName||''; }
         else { ln=pts.pop()||''; fn=g.firstName||pts.join(' ')||''; }
-        return {title:t,firstName:fn,lastName:ln,stateroom:g.stateroom||r.stateroom||''};
+        return {title:t,firstName:fn,lastName:ln,stateroom:g.stateroom||r.stateroom||'',dietary:g.dietary||''};
       });
       const declared=(r.partySize||1)-1;
-      while(_gfMembers.length<declared) _gfMembers.push({title:'',firstName:'',lastName:'',stateroom:r.stateroom||''});
+      while(_gfMembers.length<declared) _gfMembers.push({title:'',firstName:'',lastName:'',stateroom:r.stateroom||'',dietary:''});
     } else {
       const extra=Math.max(0,(r.partySize||1)-1);
-      for(let i=0;i<extra;i++) _gfMembers.push({title:'',firstName:'',lastName:'',stateroom:r.stateroom||''});
+      for(let i=0;i<extra;i++) _gfMembers.push({title:'',firstName:'',lastName:'',stateroom:r.stateroom||'',dietary:''});
     }
   }
   renderPartyMembers();
@@ -1348,6 +1348,7 @@ function renderPartyMembers(){
       <input class="gm-mini" data-mi="${i}" data-mf="firstName" value="${m.firstName||''}" placeholder="First name" autocorrect="off" spellcheck="false" oninput="syncMember(this)">
       <input class="gm-mini" data-mi="${i}" data-mf="lastName" value="${m.lastName||''}" placeholder="Last name" autocorrect="off" spellcheck="false" oninput="syncMember(this)">
       <input class="gm-mini" data-mi="${i}" data-mf="stateroom" value="${m.stateroom||''}" placeholder="Cabin" inputmode="numeric" oninput="syncMember(this)">
+      <input class="gm-mini" data-mi="${i}" data-mf="dietary" value="${m.dietary||''}" placeholder="Dietary / allergies" autocorrect="off" spellcheck="false" oninput="syncMember(this)" style="grid-column:1/-1">
     </div>`).join('');
 }
 
@@ -1367,7 +1368,7 @@ function setMemberTitle(i,t,el){
 function addPartyMember(){
   const stateroom=document.getElementById('gf-stateroom').value.trim()||'';
   document.querySelectorAll('[data-mi]').forEach(inp=>{ const mi=parseInt(inp.dataset.mi),mf=inp.dataset.mf; if(_gfMembers[mi]) _gfMembers[mi][mf]=inp.value; });
-  _gfMembers.push({title:'',firstName:'',lastName:'',stateroom});
+  _gfMembers.push({title:'',firstName:'',lastName:'',stateroom,dietary:''});
   renderPartyMembers();
   setTimeout(()=>{ const row=document.getElementById('gm-mr-'+(_gfMembers.length-1)); row?.querySelector('.gm-mini')?.focus(); },60);
 }
@@ -1392,7 +1393,7 @@ async function saveGuestForm(){
     const ln=_ttlCase(m.lastName||'');
     const fn=(m.firstName||'').trim();
     const gname=[m.title,fn,ln].filter(Boolean).join(' ')||ln||fn||'Guest';
-    return {name:gname,firstName:fn,lastName:(m.lastName||'').toUpperCase(),stateroom:(m.stateroom||stateroom),title:m.title||''};
+    return {name:gname,firstName:fn,lastName:(m.lastName||'').toUpperCase(),stateroom:(m.stateroom||stateroom),title:m.title||'',dietary:m.dietary||''};
   });
   const guests=[primaryGuest,...extraGuests];
   const rec={
