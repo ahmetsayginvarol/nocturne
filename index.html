@@ -4376,6 +4376,8 @@ function renderAll() {
   // Clear split animation trigger so subsequent renders don't re-fire it
   _splitAnimParent  = null;
   _splitAnimLetters = [];
+  // Reapply countdown gradients — renderAll recreated markers, wiping inline styles
+  Object.keys(_pendingResetTimers).forEach(tid => _applyTimerGradient(tid));
 }
 
 function attachMarkerEvents(marker, id) {
@@ -8109,15 +8111,16 @@ function _updateResetPill() {
   }).join('');
 }
 
-function _cleanupLocalTimer(id) {
+function _cleanupLocalTimer(id, keepBackground) {
   const p = _pendingResetTimers[id];
   if (!p) return;
   clearTimeout(p.timeoutId);
   clearInterval(p.intervalId);
   delete _pendingResetTimers[id];
-  // Restore dot's original background (CSS class takes over again)
-  const marker = document.getElementById('tm-' + id);
-  if (marker) marker.style.background = '';
+  if (!keepBackground) {
+    const marker = document.getElementById('tm-' + id);
+    if (marker) marker.style.background = '';
+  }
   _updateResetPill();
 }
 
@@ -8126,6 +8129,23 @@ function _tableResetColor(id) {
   if (!t || !t.occupied) return '#508cdc';
   const palette = { 1: '#f4a261', 2: '#e63946', 3: '#7b2fbe', 4: '#d4af37' };
   return palette[t.seating] || '#f4a261';
+}
+
+function _applyTimerGradient(id) {
+  const p = _pendingResetTimers[id];
+  if (!p) return;
+  const secsLeft = Math.max(0, Math.round((p.endsAt - Date.now()) / 1000));
+  const totalSecs = (p.totalMs || 60000) / 1000;
+  const fraction = totalSecs > 0 ? secsLeft / totalSecs : 0;
+  const bluePct = Math.round((1 - fraction) * 100);
+  if (bluePct === 0) return;
+  const fromColor = _tableResetColor(id);
+  const toColor = 'rgba(15,35,70,0.72)';
+  const marker = document.getElementById('tm-' + id);
+  if (marker) {
+    marker.style.background = 'conic-gradient(from -90deg, ' + toColor +
+      ' 0% ' + bluePct + '%, ' + fromColor + ' ' + bluePct + '% 100%)';
+  }
 }
 
 function _startLocalTimerWatch(id, endsAt, totalMs) {
@@ -8147,7 +8167,7 @@ function _fireResetTimer(id) {
     if (!current || current.claimed) return; // abort — already claimed or removed
     return Object.assign({}, current, { claimed: true, claimedBy: DEVICE_ID });
   }, (err, committed, snap) => {
-    _cleanupLocalTimer(id);
+    _cleanupLocalTimer(id, true); // keepBackground — gradient stays until doResetTable→renderAll
     if (!committed) return; // another device claimed it first
     const originalSetter = snap?.val()?.setBy || null;
     ref.remove().catch(() => {});
@@ -8183,22 +8203,8 @@ function _cancelPendingReset(id) {
 }
 
 function _tickResetCountdown(id) {
-  const p = _pendingResetTimers[id];
-  if (!p) return;
-  const secsLeft = Math.max(0, Math.round((p.endsAt - Date.now()) / 1000));
-  const totalSecs = (p.totalMs || 60000) / 1000;
-  // fraction: 1.0 at start (all original color) → 0.0 at end (all blue)
-  const fraction = totalSecs > 0 ? secsLeft / totalSecs : 0;
-  const bluePct = Math.round((1 - fraction) * 100);
-  const fromColor = _tableResetColor(id);
-  const toColor = 'rgba(15,35,70,0.72)'; // --avail background (available blue)
-  // Sweep clockwise from 12 o'clock: blue fills in, original color drains away
-  const marker = document.getElementById('tm-' + id);
-  if (marker) {
-    marker.style.background = bluePct === 0
-      ? ''  // not started yet — let CSS class control
-      : 'conic-gradient(from -90deg, ' + toColor + ' 0% ' + bluePct + '%, ' + fromColor + ' ' + bluePct + '% 100%)';
-  }
+  if (!_pendingResetTimers[id]) return;
+  _applyTimerGradient(id);
   _updateResetPill();
 }
 
