@@ -8145,17 +8145,17 @@ function _tableResetColor(id) {
 function _applyTimerGradient(id) {
   const p = _pendingResetTimers[id];
   if (!p) return;
-  const secsLeft = Math.max(0, Math.round((p.endsAt - Date.now()) / 1000));
-  const totalSecs = (p.totalMs || 60000) / 1000;
-  const fraction = totalSecs > 0 ? secsLeft / totalSecs : 0;
-  const bluePct = Math.round((1 - fraction) * 100);
-  if (bluePct === 0) return;
+  const msLeft = Math.max(0, p.endsAt - Date.now());
+  const totalMs = p.totalMs || 60000;
+  const fraction = msLeft / totalMs; // continuous float — not rounded to seconds
+  const bluePct = (1 - fraction) * 100;
+  if (bluePct <= 0) return;
   const fromColor = _tableResetColor(id);
   const toColor = 'rgba(15,35,70,0.72)';
   const marker = document.getElementById('tm-' + id);
   if (marker) {
     marker.style.background = 'conic-gradient(from -90deg, ' + toColor +
-      ' 0% ' + bluePct + '%, ' + fromColor + ' ' + bluePct + '% 100%)';
+      ' 0% ' + bluePct.toFixed(4) + '%, ' + fromColor + ' ' + bluePct.toFixed(4) + '% 100%)';
     marker.style.color = 'rgba(180,210,255,0.9)';
   }
 }
@@ -8197,6 +8197,7 @@ function _fireResetTimer(id) {
     // Play completion spin, then reset
     const marker = document.getElementById('tm-' + id);
     if (marker) {
+      marker.style.transform = ''; // clear inline transform so keyframes can take control
       marker.classList.add('tm-wheel-complete');
       setTimeout(() => doResetTable(id, originalSetter), 520);
     } else {
