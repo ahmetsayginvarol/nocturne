@@ -8119,7 +8119,7 @@ function _cleanupLocalTimer(id, keepBackground) {
   delete _pendingResetTimers[id];
   if (!keepBackground) {
     const marker = document.getElementById('tm-' + id);
-    if (marker) marker.style.background = '';
+    if (marker) { marker.style.background = ''; marker.style.color = ''; }
   }
   _updateResetPill();
 }
@@ -8145,6 +8145,7 @@ function _applyTimerGradient(id) {
   if (marker) {
     marker.style.background = 'conic-gradient(from -90deg, ' + toColor +
       ' 0% ' + bluePct + '%, ' + fromColor + ' ' + bluePct + '% 100%)';
+    marker.style.color = 'rgba(180,210,255,0.9)';
   }
 }
 
