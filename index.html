@@ -960,6 +960,17 @@ body {
 }
 .tm.tm-flash-seat  { animation: tm-pop-seat  0.44s cubic-bezier(.2,.8,.3,1) forwards !important; }
 .tm.tm-flash-reset { animation: tm-pop-reset 0.38s cubic-bezier(.2,.8,.3,1) forwards !important; }
+@keyframes tm-wheel-complete {
+  0%   { transform: translate(-50%,-50%) scale(1)    rotate(0deg);   filter: brightness(1)   saturate(1); }
+  30%  { transform: translate(-50%,-50%) scale(1.45) rotate(160deg); filter: brightness(4)   saturate(0.05); }
+  62%  { transform: translate(-50%,-50%) scale(0.88) rotate(320deg); filter: brightness(1.6) saturate(0.6); }
+  100% { transform: translate(-50%,-50%) scale(1)    rotate(360deg); filter: brightness(1)   saturate(1); }
+}
+.tm.tm-wheel-complete {
+  animation: tm-wheel-complete 0.52s cubic-bezier(.22,1.4,.36,1) both;
+  pointer-events: none;
+  z-index: 15;
+}
 /* Countdown overlay shown on markers with a pending auto-reset */
 .reset-countdown {
   position: absolute;
@@ -8115,7 +8126,7 @@ function _cleanupLocalTimer(id, keepBackground) {
   const p = _pendingResetTimers[id];
   if (!p) return;
   clearTimeout(p.timeoutId);
-  clearInterval(p.intervalId);
+  if (p.rafId) cancelAnimationFrame(p.rafId);
   delete _pendingResetTimers[id];
   if (!keepBackground) {
     const marker = document.getElementById('tm-' + id);
@@ -8149,15 +8160,26 @@ function _applyTimerGradient(id) {
   }
 }
 
+function _rafTick(id) {
+  const p = _pendingResetTimers[id];
+  if (!p) return;
+  _applyTimerGradient(id);
+  // Update pill text at most once per second
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (nowSec !== p._lastPillSec) {
+    p._lastPillSec = nowSec;
+    _updateResetPill();
+  }
+  p.rafId = requestAnimationFrame(() => _rafTick(id));
+}
+
 function _startLocalTimerWatch(id, endsAt, totalMs) {
-  // Cancel any previous local watch for this table
   _cleanupLocalTimer(id);
   const remaining = endsAt - Date.now();
-  if (remaining <= 0) return; // already expired — listener will fire reset
-  const intervalId = setInterval(() => _tickResetCountdown(id), 1000);
-  const timeoutId  = setTimeout(() => _fireResetTimer(id), remaining);
-  _pendingResetTimers[id] = { timeoutId, intervalId, endsAt, totalMs: totalMs || 60000 };
-  _tickResetCountdown(id);
+  if (remaining <= 0) return;
+  const timeoutId = setTimeout(() => _fireResetTimer(id), remaining);
+  _pendingResetTimers[id] = { timeoutId, rafId: null, endsAt, totalMs: totalMs || 60000, _lastPillSec: 0 };
+  _rafTick(id);
   _updateResetPill();
 }
 
@@ -8168,11 +8190,18 @@ function _fireResetTimer(id) {
     if (!current || current.claimed) return; // abort — already claimed or removed
     return Object.assign({}, current, { claimed: true, claimedBy: DEVICE_ID });
   }, (err, committed, snap) => {
-    _cleanupLocalTimer(id, true); // keepBackground — gradient stays until doResetTable→renderAll
+    _cleanupLocalTimer(id, true); // keepBackground — gradient stays through the spin animation
     if (!committed) return; // another device claimed it first
     const originalSetter = snap?.val()?.setBy || null;
     ref.remove().catch(() => {});
-    doResetTable(id, originalSetter);
+    // Play completion spin, then reset
+    const marker = document.getElementById('tm-' + id);
+    if (marker) {
+      marker.classList.add('tm-wheel-complete');
+      setTimeout(() => doResetTable(id, originalSetter), 520);
+    } else {
+      doResetTable(id, originalSetter);
+    }
   });
 }
 
@@ -8201,12 +8230,6 @@ function _cancelPendingReset(id) {
   db.ref('eclipse/deck7/resetTimers/' + id).remove().catch(() => {});
   _cleanupLocalTimer(id);
   setStatus('Timer cancelled — table ' + id + ' will not auto-reset');
-}
-
-function _tickResetCountdown(id) {
-  if (!_pendingResetTimers[id]) return;
-  _applyTimerGradient(id);
-  _updateResetPill();
 }
 
 function doResetTable(id, _senderOverride) {
