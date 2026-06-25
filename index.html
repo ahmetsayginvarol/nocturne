@@ -8115,8 +8115,9 @@ function _cleanupLocalTimer(id) {
   clearTimeout(p.timeoutId);
   clearInterval(p.intervalId);
   delete _pendingResetTimers[id];
-  document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
-  document.getElementById('reset-ring-' + id)?.remove();
+  // Restore dot's original background (CSS class takes over again)
+  const marker = document.getElementById('tm-' + id);
+  if (marker) marker.style.background = '';
   _updateResetPill();
 }
 
@@ -8127,54 +8128,6 @@ function _tableResetColor(id) {
   return palette[t.seating] || '#f4a261';
 }
 
-function _createResetRing(id) {
-  document.getElementById('reset-ring-' + id)?.remove();
-  const p = _pendingResetTimers[id];
-  if (!p) return;
-  const td = TABLE_DATA.find(t => t.id == id);
-  if (!td) return;
-  const layer = document.getElementById('table-layer');
-  if (!layer) return;
-  const pos = state.positions[id] || { x: td.x, y: td.y };
-  const mSize = (state.tableStyles && state.tableStyles[id] && state.tableStyles[id].w) || 30;
-  const svgSize = mSize + 10;
-  const r = (svgSize - 5) / 2;
-  const circ = 2 * Math.PI * r;
-  const fromColor = _tableResetColor(id);
-  const NS = 'http://www.w3.org/2000/svg';
-
-  const svg = document.createElementNS(NS, 'svg');
-  svg.id = 'reset-ring-' + id;
-  svg.classList.add('reset-ring');
-  svg.style.cssText = 'position:absolute;left:' + pos.x + '%;top:' + pos.y + '%;' +
-    'transform:translate(-50%,-50%) rotate(-90deg);' +
-    'width:' + svgSize + 'px;height:' + svgSize + 'px;' +
-    'pointer-events:none;z-index:6;overflow:visible;';
-
-  // Dim blue background — destination color always visible
-  const bg = document.createElementNS(NS, 'circle');
-  bg.setAttribute('cx', svgSize / 2); bg.setAttribute('cy', svgSize / 2);
-  bg.setAttribute('r', r); bg.setAttribute('fill', 'none');
-  bg.setAttribute('stroke', '#508cdc'); bg.setAttribute('stroke-width', '3');
-  bg.setAttribute('opacity', '0.28');
-  svg.appendChild(bg);
-
-  // Foreground arc — drains clockwise as timer counts down
-  const arc = document.createElementNS(NS, 'circle');
-  arc.setAttribute('cx', svgSize / 2); arc.setAttribute('cy', svgSize / 2);
-  arc.setAttribute('r', r); arc.setAttribute('fill', 'none');
-  arc.setAttribute('stroke', fromColor); arc.setAttribute('stroke-width', '3.5');
-  arc.setAttribute('stroke-linecap', 'round');
-  arc.setAttribute('stroke-dasharray', circ);
-  arc.setAttribute('stroke-dashoffset', '0');
-  arc.style.filter = 'drop-shadow(0 0 3px ' + fromColor + '88)';
-  svg.appendChild(arc);
-
-  layer.appendChild(svg);
-  p.circ = circ;
-  p.arcEl = arc;
-}
-
 function _startLocalTimerWatch(id, endsAt, totalMs) {
   // Cancel any previous local watch for this table
   _cleanupLocalTimer(id);
@@ -8183,7 +8136,6 @@ function _startLocalTimerWatch(id, endsAt, totalMs) {
   const intervalId = setInterval(() => _tickResetCountdown(id), 1000);
   const timeoutId  = setTimeout(() => _fireResetTimer(id), remaining);
   _pendingResetTimers[id] = { timeoutId, intervalId, endsAt, totalMs: totalMs || 60000 };
-  _createResetRing(id);
   _tickResetCountdown(id);
   _updateResetPill();
 }
@@ -8232,19 +8184,21 @@ function _cancelPendingReset(id) {
 
 function _tickResetCountdown(id) {
   const p = _pendingResetTimers[id];
-  if (!p) {
-    document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
-    return;
-  }
+  if (!p) return;
   const secsLeft = Math.max(0, Math.round((p.endsAt - Date.now()) / 1000));
-
-  // Drive the SVG arc — fraction goes 1.0 (full) → 0.0 (empty)
-  if (p.arcEl && p.circ != null) {
-    const totalSecs = (p.totalMs || 60000) / 1000;
-    const fraction = totalSecs > 0 ? secsLeft / totalSecs : 0;
-    p.arcEl.setAttribute('stroke-dashoffset', (1 - fraction) * p.circ);
+  const totalSecs = (p.totalMs || 60000) / 1000;
+  // fraction: 1.0 at start (all original color) → 0.0 at end (all blue)
+  const fraction = totalSecs > 0 ? secsLeft / totalSecs : 0;
+  const bluePct = Math.round((1 - fraction) * 100);
+  const fromColor = _tableResetColor(id);
+  const toColor = 'rgba(15,35,70,0.72)'; // --avail background (available blue)
+  // Sweep clockwise from 12 o'clock: blue fills in, original color drains away
+  const marker = document.getElementById('tm-' + id);
+  if (marker) {
+    marker.style.background = bluePct === 0
+      ? ''  // not started yet — let CSS class control
+      : 'conic-gradient(from -90deg, ' + toColor + ' 0% ' + bluePct + '%, ' + fromColor + ' ' + bluePct + '% 100%)';
   }
-
   _updateResetPill();
 }
 
