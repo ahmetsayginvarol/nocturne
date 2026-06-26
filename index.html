@@ -8173,6 +8173,15 @@ function _rafTick(id) {
     p._lastPillSec = nowSec;
     _updateResetPill();
   }
+  // Self-heal: tablets throttle/suspend setTimeout when backgrounded, so the
+  // scheduled fire can be missed entirely. rAF resumes the instant the tab is
+  // visible again — if we've passed endsAt and haven't fired yet, fire now.
+  // _fireResetTimer's transaction safely no-ops if another device already won.
+  if (!p.fired && Date.now() >= p.endsAt) {
+    p.fired = true;
+    _fireResetTimer(id);
+    return; // stop the rAF loop — cleanup happens in the fire callback
+  }
   p.rafId = requestAnimationFrame(() => _rafTick(id));
 }
 
@@ -8187,12 +8196,22 @@ function _startLocalTimerWatch(id, endsAt, totalMs) {
 }
 
 function _fireResetTimer(id) {
+  const p = _pendingResetTimers[id];
+  if (p) {
+    if (p._firing) return; // already in flight — don't double-fire
+    p._firing = true;
+    if (p.rafId) cancelAnimationFrame(p.rafId); // stop the countdown loop
+  }
+  // Safety: if the transaction callback never returns (offline / lost socket),
+  // clear the stale local entry after a grace period so the pill can't sit at 0s.
+  const safety = setTimeout(() => _cleanupLocalTimer(id), 7000);
   // Transaction ensures only ONE device calls doResetTable
   const ref = db.ref('eclipse/deck7/resetTimers/' + id);
   ref.transaction(current => {
     if (!current || current.claimed) return; // abort — already claimed or removed
     return Object.assign({}, current, { claimed: true, claimedBy: DEVICE_ID });
   }, (err, committed, snap) => {
+    clearTimeout(safety);
     _cleanupLocalTimer(id, true); // keepBackground — gradient stays through the spin animation
     if (!committed) return; // another device claimed it first
     const originalSetter = snap?.val()?.setBy || null;
