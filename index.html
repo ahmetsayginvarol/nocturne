@@ -4891,19 +4891,27 @@ function recordClearingActivity() { _clearingHistory.push(Date.now()); }
 
 function computeActivityScore() {
   const now = Date.now();
-  const win15 = 15 * 60 * 1000;
 
-  // Trim history to last 30 min
-  while (_seatingHistory.length && now - _seatingHistory[0] > 30*60*1000) _seatingHistory.shift();
+  // Trim old history (keep 30 min)
+  while (_seatingHistory.length  && now - _seatingHistory[0]  > 30*60*1000) _seatingHistory.shift();
   while (_clearingHistory.length && now - _clearingHistory[0] > 30*60*1000) _clearingHistory.shift();
 
-  // Tables seated in last 15 min ÷ 15 = per-min rate
-  const seatingsRecent = _seatingHistory.filter(t => now - t <= win15).length;
-  const clearingsRecent = _clearingHistory.filter(t => now - t <= win15).length;
-  const seatingRate  = seatingsRecent / 15;
-  const clearingRate = clearingsRecent / 15;
+  // Exponential decay weighting — half-life of 3 minutes.
+  // An event 3 min ago counts 50%, 6 min ago counts 25%, etc.
+  // This makes the meter respond immediately to bursts and decay smoothly when quiet.
+  const HALF_LIFE = 3 * 60 * 1000;
+  const λ = Math.LN2 / HALF_LIFE;
+  let seatW = 0, resetW = 0;
+  _seatingHistory.forEach(t  => { seatW  += Math.exp(-λ * (now - t)); });
+  _clearingHistory.forEach(t => { resetW += Math.exp(-λ * (now - t)); });
 
-  // Occupancy
+  // Saturation: ~3 events in the last minute = fully saturated (score 1.0).
+  // This means 5 resets in 5 minutes produces a high score — realistic for a busy floor.
+  const SAT = 2.5;
+  const normSeat  = Math.min(1, seatW  / SAT);
+  const normReset = Math.min(1, resetW / SAT);
+
+  // Occupancy — reduced to 25% so activity events dominate
   let activeTables = 0, totalTables = 0;
   TABLE_DATA.forEach(td => {
     if (state.splits[td.id]) {
@@ -4913,7 +4921,6 @@ function computeActivityScore() {
         if (state.tables[td.id + l]?.occupied) activeTables++;
       });
     } else {
-      // Skip tables in closed stations from "total" — they can't be filled
       if (!isTableInClosedStation(td.id)) {
         totalTables++;
         if (state.tables[td.id]?.occupied) activeTables++;
@@ -4922,12 +4929,8 @@ function computeActivityScore() {
   });
   const occupancyRatio = totalTables > 0 ? activeTables / totalTables : 0;
 
-  // Normalize rates against 1.5 tables/min as saturation
-  const SAT = 1.5;
-  const normSeating  = Math.min(1, seatingRate / SAT);
-  const normClearing = Math.min(1, clearingRate / SAT);
-
-  const score = 0.45 * occupancyRatio + 0.30 * normSeating + 0.25 * normClearing;
+  // Resets get highest weight (user-requested) — more clearing = more floor movement
+  const score = 0.25 * occupancyRatio + 0.30 * normSeat + 0.45 * normReset;
   return Math.max(0, Math.min(1, score));
 }
 
@@ -10057,6 +10060,8 @@ function initFirebase() {
     try { evaluateHints(); } catch(e) { console.warn('Hint engine error:', e); }
     try { renderStressOverlay(); } catch(e) { console.warn('Stress overlay error:', e); }
   }, 30000);
+  // ── Tempo meter refresh every 10 seconds — lets exponential decay show live ─
+  setInterval(() => { try { updateStats(); } catch(e) {} }, 10000);
   // Also refresh stress overlay when state changes (immediate)
   // (Will be hooked into renderAll below.)
 
