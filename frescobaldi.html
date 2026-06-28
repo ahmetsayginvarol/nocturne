@@ -1184,11 +1184,24 @@ function processNewFormatCSV(rows){
 }
 
 function showImportModal(parsed,date,time){
+  // Reconcile preview: how this CSV will affect the existing manifest
+  const existing = st.reservations||{};
+  const incoming = new Set(parsed.map(r=>(r.resId||'').replace(/[.#$[\]]/g,'_')));
+  let added=0, kept=0;
+  for(const k of incoming){ if(existing[k]) kept++; else added++; }
+  let removed=0;
+  for(const k of Object.keys(existing)){ if(!incoming.has(k)) removed++; }
+  const hasManifest = Object.keys(existing).length>0;
+
   document.getElementById('import-info').innerHTML =
     `Found <strong>${parsed.length} ACTIVE reservation(s)</strong>.`+
     (date?` Event date: <strong>${fmtDateLong(date)}</strong>`:'') +
     (time?` · Time: <strong>${time}</strong>`:'') +
-    `<br>Names normalized from CSV format. Review before importing.`;
+    (hasManifest
+      ? `<br><span style="color:var(--green)">+${added} new</span> · <span style="color:var(--mid)">${kept} kept (unchanged)</span>`+
+        (removed?` · <span style="color:var(--s2)">−${removed} removed</span>`:'') +
+        `<br><span style="font-size:10px;color:var(--dim)">Existing guests are preserved; only new ones are added and dropped ones removed.</span>`
+      : `<br>Names normalized from CSV format. Review before importing.`);
   const hasTable = parsed.some(r=>r.tableHint);
   const rows = parsed.slice(0,60).map(r=>{
     const gs=(r.guests||[]).map(g=>typeof g==='string'?{name:g,stateroom:''}:g);
@@ -1214,24 +1227,39 @@ async function confirmImport(){
   if(!st.currentId||!st._importRows.length) return;
   document.getElementById('btn-confirm-import').disabled=true;
   const {evDate,evTime} = st._importMeta;
-  if(evDate||evTime){
-    const upd={};
-    if(evDate){ upd.date=evDate; document.getElementById('em-date').value=evDate; }
-    if(evTime){ upd.time=evTime; document.getElementById('em-time').value=evTime; }
-    await db.ref(`${ROOT}/events/${st.currentId}`).update(upd);
-  }
+  // Single atomic multi-path update from the event root: date/time + reservation reconcile
   const batch={};
+  if(evDate){ batch.date=evDate; document.getElementById('em-date').value=evDate; }
+  if(evTime){ batch.time=evTime; document.getElementById('em-time').value=evTime; }
+
+  // Reconcile against what's already in the manifest. CSV is the source of truth:
+  //  · new resId  → add
+  //  · existing   → leave untouched (preserve manual edits — first names, dietary, party members)
+  //  · missing    → remove (along with any seating record)
+  const existing = st.reservations||{};
+  const incomingKeys = new Set();
+  let added=0, kept=0, removed=0;
   for(const r of st._importRows){
     const k=r.resId.replace(/[.#$[\]]/g,'_');
+    incomingKeys.add(k);
+    if(existing[k]){ kept++; continue; }   // already present — don't overwrite
     const entry={name:r.name,lastName:r.lastName,stateroom:r.stateroom,partySize:r.partySize,
               funding:r.chargeTo||r.funding,amount:r.amount||0,serviceCharge:r.serviceCharge||0,dietary:'',notes:''};
     if(r.tableHint) entry.tableHint=r.tableHint;
     if(r.guests&&r.guests.length) entry.guests=r.guests;
-    batch[k]=entry;
+    batch[`reservations/${k}`]=entry;
+    added++;
   }
-  await db.ref(`${ROOT}/events/${st.currentId}/reservations`).update(batch);
+  for(const k of Object.keys(existing)){
+    if(!incomingKeys.has(k)){
+      batch[`reservations/${k}`]=null;
+      batch[`seating/${k}`]=null;        // drop orphaned live-seating record too
+      removed++;
+    }
+  }
+  await db.ref(`${ROOT}/events/${st.currentId}`).update(batch);
   closeImportModal();
-  toast(`Imported ${st._importRows.length} reservations`,'ok');
+  toast(`Synced — ${added} added · ${kept} kept · ${removed} removed`,'ok');
   document.getElementById('btn-confirm-import').disabled=false;
 }
 
