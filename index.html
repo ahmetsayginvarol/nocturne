@@ -960,6 +960,17 @@ body {
 }
 .tm.tm-flash-seat  { animation: tm-pop-seat  0.44s cubic-bezier(.2,.8,.3,1) forwards !important; }
 .tm.tm-flash-reset { animation: tm-pop-reset 0.38s cubic-bezier(.2,.8,.3,1) forwards !important; }
+@keyframes tm-wheel-complete {
+  0%   { transform: translate(-50%,-50%) scale(1)    rotate(0deg);   filter: brightness(1)   saturate(1); }
+  30%  { transform: translate(-50%,-50%) scale(1.45) rotate(160deg); filter: brightness(4)   saturate(0.05); }
+  62%  { transform: translate(-50%,-50%) scale(0.88) rotate(320deg); filter: brightness(1.6) saturate(0.6); }
+  100% { transform: translate(-50%,-50%) scale(1)    rotate(360deg); filter: brightness(1)   saturate(1); }
+}
+.tm.tm-wheel-complete {
+  animation: tm-wheel-complete 0.52s cubic-bezier(.22,1.4,.36,1) both;
+  pointer-events: none;
+  z-index: 15;
+}
 /* Countdown overlay shown on markers with a pending auto-reset */
 .reset-countdown {
   position: absolute;
@@ -4376,6 +4387,8 @@ function renderAll() {
   // Clear split animation trigger so subsequent renders don't re-fire it
   _splitAnimParent  = null;
   _splitAnimLetters = [];
+  // Reapply countdown gradients — renderAll recreated markers, wiping inline styles
+  Object.keys(_pendingResetTimers).forEach(tid => _applyTimerGradient(tid));
 }
 
 function attachMarkerEvents(marker, id) {
@@ -4878,19 +4891,27 @@ function recordClearingActivity() { _clearingHistory.push(Date.now()); }
 
 function computeActivityScore() {
   const now = Date.now();
-  const win15 = 15 * 60 * 1000;
 
-  // Trim history to last 30 min
-  while (_seatingHistory.length && now - _seatingHistory[0] > 30*60*1000) _seatingHistory.shift();
+  // Trim old history (keep 30 min)
+  while (_seatingHistory.length  && now - _seatingHistory[0]  > 30*60*1000) _seatingHistory.shift();
   while (_clearingHistory.length && now - _clearingHistory[0] > 30*60*1000) _clearingHistory.shift();
 
-  // Tables seated in last 15 min ÷ 15 = per-min rate
-  const seatingsRecent = _seatingHistory.filter(t => now - t <= win15).length;
-  const clearingsRecent = _clearingHistory.filter(t => now - t <= win15).length;
-  const seatingRate  = seatingsRecent / 15;
-  const clearingRate = clearingsRecent / 15;
+  // Exponential decay weighting — half-life of 3 minutes.
+  // An event 3 min ago counts 50%, 6 min ago counts 25%, etc.
+  // This makes the meter respond immediately to bursts and decay smoothly when quiet.
+  const HALF_LIFE = 3 * 60 * 1000;
+  const λ = Math.LN2 / HALF_LIFE;
+  let seatW = 0, resetW = 0;
+  _seatingHistory.forEach(t  => { seatW  += Math.exp(-λ * (now - t)); });
+  _clearingHistory.forEach(t => { resetW += Math.exp(-λ * (now - t)); });
 
-  // Occupancy
+  // Saturation: ~3 events in the last minute = fully saturated (score 1.0).
+  // This means 5 resets in 5 minutes produces a high score — realistic for a busy floor.
+  const SAT = 2.5;
+  const normSeat  = Math.min(1, seatW  / SAT);
+  const normReset = Math.min(1, resetW / SAT);
+
+  // Occupancy — reduced to 25% so activity events dominate
   let activeTables = 0, totalTables = 0;
   TABLE_DATA.forEach(td => {
     if (state.splits[td.id]) {
@@ -4900,7 +4921,6 @@ function computeActivityScore() {
         if (state.tables[td.id + l]?.occupied) activeTables++;
       });
     } else {
-      // Skip tables in closed stations from "total" — they can't be filled
       if (!isTableInClosedStation(td.id)) {
         totalTables++;
         if (state.tables[td.id]?.occupied) activeTables++;
@@ -4909,12 +4929,8 @@ function computeActivityScore() {
   });
   const occupancyRatio = totalTables > 0 ? activeTables / totalTables : 0;
 
-  // Normalize rates against 1.5 tables/min as saturation
-  const SAT = 1.5;
-  const normSeating  = Math.min(1, seatingRate / SAT);
-  const normClearing = Math.min(1, clearingRate / SAT);
-
-  const score = 0.45 * occupancyRatio + 0.30 * normSeating + 0.25 * normClearing;
+  // Resets get highest weight (user-requested) — more clearing = more floor movement
+  const score = 0.25 * occupancyRatio + 0.30 * normSeat + 0.45 * normReset;
   return Math.max(0, Math.min(1, score));
 }
 
@@ -8109,41 +8125,106 @@ function _updateResetPill() {
   }).join('');
 }
 
-function _cleanupLocalTimer(id) {
+function _cleanupLocalTimer(id, keepBackground) {
   const p = _pendingResetTimers[id];
   if (!p) return;
   clearTimeout(p.timeoutId);
-  clearInterval(p.intervalId);
+  if (p.rafId) cancelAnimationFrame(p.rafId);
   delete _pendingResetTimers[id];
-  document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
+  if (!keepBackground) {
+    const marker = document.getElementById('tm-' + id);
+    if (marker) { marker.style.background = ''; marker.style.color = ''; }
+  }
   _updateResetPill();
 }
 
-function _startLocalTimerWatch(id, endsAt) {
-  // Cancel any previous local watch for this table
+function _tableResetColor(id) {
+  const t = state.tables[id];
+  if (!t || !t.occupied) return '#508cdc';
+  const palette = { 1: '#f4a261', 2: '#e63946', 3: '#7b2fbe', 4: '#d4af37' };
+  return palette[t.seating] || '#f4a261';
+}
+
+function _applyTimerGradient(id) {
+  const p = _pendingResetTimers[id];
+  if (!p) return;
+  const msLeft = Math.max(0, p.endsAt - Date.now());
+  const totalMs = p.totalMs || 60000;
+  const fraction = msLeft / totalMs; // continuous float — not rounded to seconds
+  const bluePct = (1 - fraction) * 100;
+  if (bluePct <= 0) return;
+  const fromColor = _tableResetColor(id);
+  const toColor = 'rgba(15,35,70,0.72)';
+  const marker = document.getElementById('tm-' + id);
+  if (marker) {
+    marker.style.background = 'conic-gradient(from -90deg, ' + toColor +
+      ' 0% ' + bluePct.toFixed(4) + '%, ' + fromColor + ' ' + bluePct.toFixed(4) + '% 100%)';
+    marker.style.color = 'rgba(180,210,255,0.9)';
+  }
+}
+
+function _rafTick(id) {
+  const p = _pendingResetTimers[id];
+  if (!p) return;
+  _applyTimerGradient(id);
+  // Update pill text at most once per second
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (nowSec !== p._lastPillSec) {
+    p._lastPillSec = nowSec;
+    _updateResetPill();
+  }
+  // Self-heal: tablets throttle/suspend setTimeout when backgrounded, so the
+  // scheduled fire can be missed entirely. rAF resumes the instant the tab is
+  // visible again — if we've passed endsAt and haven't fired yet, fire now.
+  // _fireResetTimer's transaction safely no-ops if another device already won.
+  if (!p.fired && Date.now() >= p.endsAt) {
+    p.fired = true;
+    _fireResetTimer(id);
+    return; // stop the rAF loop — cleanup happens in the fire callback
+  }
+  p.rafId = requestAnimationFrame(() => _rafTick(id));
+}
+
+function _startLocalTimerWatch(id, endsAt, totalMs) {
   _cleanupLocalTimer(id);
   const remaining = endsAt - Date.now();
-  if (remaining <= 0) return; // already expired — listener will fire reset
-  const intervalId = setInterval(() => _tickResetCountdown(id), 1000);
-  const timeoutId  = setTimeout(() => _fireResetTimer(id), remaining);
-  _pendingResetTimers[id] = { timeoutId, intervalId, endsAt };
-  _tickResetCountdown(id);
+  if (remaining <= 0) return;
+  const timeoutId = setTimeout(() => _fireResetTimer(id), remaining);
+  _pendingResetTimers[id] = { timeoutId, rafId: null, endsAt, totalMs: totalMs || 60000, _lastPillSec: 0 };
+  _rafTick(id);
   _updateResetPill();
 }
 
 function _fireResetTimer(id) {
+  const p = _pendingResetTimers[id];
+  if (p) {
+    if (p._firing) return; // already in flight — don't double-fire
+    p._firing = true;
+    if (p.rafId) cancelAnimationFrame(p.rafId); // stop the countdown loop
+  }
+  // Safety: if the transaction callback never returns (offline / lost socket),
+  // clear the stale local entry after a grace period so the pill can't sit at 0s.
+  const safety = setTimeout(() => _cleanupLocalTimer(id), 7000);
   // Transaction ensures only ONE device calls doResetTable
   const ref = db.ref('eclipse/deck7/resetTimers/' + id);
   ref.transaction(current => {
     if (!current || current.claimed) return; // abort — already claimed or removed
     return Object.assign({}, current, { claimed: true, claimedBy: DEVICE_ID });
   }, (err, committed, snap) => {
-    _cleanupLocalTimer(id);
-    document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
+    clearTimeout(safety);
+    _cleanupLocalTimer(id, true); // keepBackground — gradient stays through the spin animation
     if (!committed) return; // another device claimed it first
     const originalSetter = snap?.val()?.setBy || null;
     ref.remove().catch(() => {});
-    doResetTable(id, originalSetter);
+    // Play completion spin, then reset
+    const marker = document.getElementById('tm-' + id);
+    if (marker) {
+      marker.style.transform = ''; // clear inline transform so keyframes can take control
+      marker.classList.add('tm-wheel-complete');
+      setTimeout(() => doResetTable(id, originalSetter), 520);
+    } else {
+      doResetTable(id, originalSetter);
+    }
   });
 }
 
@@ -8161,7 +8242,7 @@ function scheduleResetTable(id) {
   const endsAt = Date.now() + mins * 60 * 1000;
 
   // Write to Firebase — all devices' listener will start the countdown
-  db.ref('eclipse/deck7/resetTimers/' + id).set({ endsAt, setBy: DEVICE_ID }).catch(() => {});
+  db.ref('eclipse/deck7/resetTimers/' + id).set({ endsAt, totalMs: mins * 60 * 1000, setBy: DEVICE_ID }).catch(() => {});
 
   closeModal();
   setStatus('⏱ Table ' + id + ' will auto-reset in ' + mins + ' min');
@@ -8172,33 +8253,6 @@ function _cancelPendingReset(id) {
   db.ref('eclipse/deck7/resetTimers/' + id).remove().catch(() => {});
   _cleanupLocalTimer(id);
   setStatus('Timer cancelled — table ' + id + ' will not auto-reset');
-}
-
-function _tickResetCountdown(id) {
-  const p = _pendingResetTimers[id];
-  if (!p) {
-    // Entry was removed (timer fired or cancelled) — clean up any stale badge
-    document.getElementById('tm-' + id)?.querySelector('.reset-countdown')?.remove();
-    return;
-  }
-  const secsLeft = Math.max(0, Math.round((p.endsAt - Date.now()) / 1000));
-  const mins = Math.floor(secsLeft / 60);
-  const secs = secsLeft % 60;
-  const label = mins > 0
-    ? mins + ':' + String(secs).padStart(2, '0')
-    : secs + 's';
-  // Update the marker countdown overlay — re-attach after renderAll() rebuilds markers
-  const marker = document.getElementById('tm-' + id);
-  if (marker) {
-    let cd = marker.querySelector('.reset-countdown');
-    if (!cd) {
-      cd = document.createElement('div');
-      cd.className = 'reset-countdown';
-      marker.appendChild(cd);
-    }
-    cd.textContent = '⏱ ' + label;
-  }
-  _updateResetPill();
 }
 
 function doResetTable(id, _senderOverride) {
@@ -9951,7 +10005,7 @@ function initFirebase() {
       const existing = _pendingResetTimers[tableId];
       // Only re-init if not already watching this exact timer
       if (!existing || existing.endsAt !== entry.endsAt) {
-        _startLocalTimerWatch(tableId, entry.endsAt);
+        _startLocalTimerWatch(tableId, entry.endsAt, entry.totalMs || 60000);
       }
     });
     // Clean up timers that were removed (cancelled or fired)
@@ -10025,6 +10079,8 @@ function initFirebase() {
     try { evaluateHints(); } catch(e) { console.warn('Hint engine error:', e); }
     try { renderStressOverlay(); } catch(e) { console.warn('Stress overlay error:', e); }
   }, 30000);
+  // ── Tempo meter refresh every 10 seconds — lets exponential decay show live ─
+  setInterval(() => { try { updateStats(); } catch(e) {} }, 10000);
   // Also refresh stress overlay when state changes (immediate)
   // (Will be hooked into renderAll below.)
 
