@@ -7496,26 +7496,28 @@ function showSeatModal(id) {
       <button class="btn-s" onclick="closeModal()">CANCEL</button>
     </div>
 
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border2);text-align:center;">
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border2);display:flex;flex-direction:column;gap:8px;">
       <button onclick="blockTableConfirm('${id}')"
-        style="background:transparent;border:1px solid var(--border2);color:var(--text-dim);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;"
+        style="width:100%;background:transparent;border:1px solid var(--border2);color:var(--text-dim);padding:9px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;"
         onmouseover="this.style.borderColor='var(--text-mid)';this.style.color='var(--text-mid)'"
         onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text-dim)'">
         ⊘ BLOCK TABLE
       </button>
       ${(_softBlockState(id) || (tState && tState.holdGroupId)) ? `
-      <button onclick="_changeReservationTime('${id}')"
-        style="background:transparent;border:1px solid rgba(201,168,76,0.4);color:rgba(201,168,76,0.8);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;margin-left:8px;"
-        onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'"
-        onmouseout="this.style.borderColor='rgba(201,168,76,0.4)';this.style.color='rgba(201,168,76,0.8)'">
-        ⏱ CHANGE TIME
-      </button>
-      <button onclick="_confirmCancelReservation('${id}')"
-        style="background:transparent;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.65);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;margin-left:8px;"
-        onmouseover="this.style.borderColor='rgba(239,68,68,0.7)';this.style.color='#ef4444'"
-        onmouseout="this.style.borderColor='rgba(239,68,68,0.35)';this.style.color='rgba(239,68,68,0.65)'">
-        ✕ CANCEL RESERVATION
-      </button>` : ''}
+      <div style="display:flex;gap:8px;">
+        <button onclick="_changeReservationTime('${id}')"
+          style="flex:1;background:transparent;border:1px solid rgba(201,168,76,0.4);color:rgba(201,168,76,0.8);padding:9px 10px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.2px;cursor:pointer;transition:all 0.15s;"
+          onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'"
+          onmouseout="this.style.borderColor='rgba(201,168,76,0.4)';this.style.color='rgba(201,168,76,0.8)'">
+          ⏱ CHANGE TIME
+        </button>
+        <button onclick="_confirmCancelReservation('${id}')"
+          style="flex:1;background:transparent;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.65);padding:9px 10px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.2px;cursor:pointer;transition:all 0.15s;"
+          onmouseover="this.style.borderColor='rgba(239,68,68,0.7)';this.style.color='#ef4444'"
+          onmouseout="this.style.borderColor='rgba(239,68,68,0.35)';this.style.color='rgba(239,68,68,0.65)'">
+          ✕ CANCEL RESERVATION
+        </button>
+      </div>` : ''}
     </div>`;
 
   document.getElementById('modal').innerHTML = html;
