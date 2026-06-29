@@ -14345,11 +14345,54 @@ function _showHeldModal(id, group) {
     '</div>' +
     '<div class="m-btns" style="margin-top:16px;flex-wrap:wrap;gap:6px;">' +
       seatBtn +
+      '<button class="btn-s" onclick="_showHeldTimeEdit(\'' + id + '\',\'' + group.id + '\')" style="border-color:rgba(201,168,76,0.5);color:var(--gold);">⏱ CHANGE TIME</button>' +
       (isReadyToSeat ? '' : '<button class="btn-d" onclick="softBlockOverride(\'' + group.id + '\',\'' + id + '\')">RELEASE THIS TABLE ONLY</button>') +
       '<button class="btn-d" onclick="cancelHoldReservation(\'' + id + '\')" style="border-color:rgba(239,68,68,0.7);color:#ef4444;">✕ CANCEL RESERVATION</button>' +
       '<button class="btn-s" onclick="closeModal()">CLOSE</button>' +
     '</div>'
   );
+}
+
+// Inline editor to change a held group's reservation time.
+function _showHeldTimeEdit(id, groupId) {
+  const group = state.softBlocks && state.softBlocks[groupId];
+  if (!group) { setStatus('Reservation no longer exists'); closeModal(); return; }
+  const d = new Date(group.targetTime);
+  const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const note = group.note || 'reservation';
+  openModal(
+    '<h2 style="color:var(--gold)">⏱ CHANGE TIME</h2>' +
+    '<div class="m-sub">Held for ' + note + '</div>' +
+    '<div style="margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:6px;">' +
+      '<label style="font-size:11px;color:var(--text-dim);letter-spacing:.05em;">NEEDED AT</label>' +
+      '<input type="time" id="held-time-edit" value="' + hhmm + '" ' +
+        'style="background:var(--bg);border:1.5px solid var(--border2);color:var(--text);padding:10px 14px;border-radius:6px;font-family:\'DM Mono\',monospace;font-size:18px;text-align:center;outline:none;">' +
+    '</div>' +
+    '<div class="m-btns" style="margin-top:18px;">' +
+      '<button class="btn-p" onclick="_saveHeldTime(\'' + id + '\',\'' + groupId + '\')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">✓ SAVE</button>' +
+      '<button class="btn-s" onclick="_showHeldModal(\'' + id + '\',state.softBlocks[\'' + groupId + '\'])">← BACK</button>' +
+    '</div>'
+  );
+}
+
+function _saveHeldTime(id, groupId) {
+  const group = state.softBlocks && state.softBlocks[groupId];
+  if (!group) { setStatus('Reservation no longer exists'); closeModal(); return; }
+  const val = (document.getElementById('held-time-edit') || {}).value;
+  if (!val) { setStatus('Pick a valid time'); return; }
+  const newTarget = _parseHoldTimeToToday(val);
+
+  group.targetTime = newTarget;
+  // Reset urgency flags so warnings re-evaluate against the new time
+  delete group.at45;
+  if (_holdWarningsFired) {
+    ['10block', '45min', 'overdue', '20cancel'].forEach(k => _holdWarningsFired.delete(groupId + ':' + k));
+  }
+
+  db.ref('eclipse/deck7/softBlocks/' + groupId).update({ targetTime: newTarget, at45: null }).catch(() => {});
+  renderAll();
+  setStatus('Reservation time updated to ' + _fmtHoldTime(newTarget));
+  _showHeldModal(id, group);
 }
 
 // Seat the entire hold group as one combined reservation — unblocks all tables,
