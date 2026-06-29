@@ -39,6 +39,7 @@
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
+      z-index: 1;
       transition: opacity 0.22s ease, visibility 0s linear 0.22s;
       overflow-y: auto;
     }
@@ -46,6 +47,7 @@
       opacity: 1;
       visibility: visible;
       pointer-events: auto;
+      z-index: 10;
       transition: opacity 0.22s ease, visibility 0s linear 0s;
     }
     #page-calibration,
@@ -628,9 +630,9 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<!-- Firebase SDKs (same version as Nocturne) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<!-- Firebase SDKs — async so CDN load time never blocks UI boot -->
+<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
 <script>
 'use strict';
@@ -700,15 +702,13 @@ var firebaseConfig = {
   messagingSenderId: '726505687250',
   appId:             '1:726505687250:web:4a80333510fa6308ec450b'
 };
-firebase.initializeApp(firebaseConfig);
-var db = firebase.database();
-
 /* ================================================================
    APP STATE
    ================================================================ */
 var currentRest = localStorage.getItem('sunPrincessRest') || 'sabatinis';
 var tables      = {};   /* { [id]: { id, x, y, maxPax, minPax, occupyingReservationIds, ... } } */
 var activePage  = '';
+var db          = null;  /* set inside window.load once async SDK is ready */
 
 /* Listener bookkeeping */
 var seatListener    = null;
@@ -733,7 +733,7 @@ var toastTimer = null;
    HELPERS
    ================================================================ */
 function cfg() { return RESTAURANT_CONFIG[currentRest]; }
-function tblsRef() { return db.ref(cfg().firebaseRoot + '/tables'); }
+function tblsRef() { return db ? db.ref(cfg().firebaseRoot + '/tables') : null; }
 
 function numSort(a, b) { return parseInt(a, 10) - parseInt(b, 10); }
 
@@ -771,19 +771,7 @@ function setSave(state) {
   else { el.textContent = 'Save failed'; el.className = 'save-indicator err'; }
 }
 
-/* ================================================================
-   CONNECTION STATUS
-   ================================================================ */
-db.ref('.info/connected').on('value', function(snap) {
-  var on  = snap.val() === true;
-  var cls = on ? 'conn-dot online' : 'conn-dot offline';
-  var lbl = on ? 'Live' : 'Offline';
-  ['conn-ov', 'conn-seat'].forEach(function(id) {
-    document.getElementById(id).className = cls;
-  });
-  document.getElementById('conn-lbl-ov').textContent   = lbl;
-  document.getElementById('conn-lbl-seat').textContent = lbl;
-});
+/* Connection status listener is set up inside the window.load Firebase init below */
 
 /* ================================================================
    PAGE NAVIGATION
@@ -845,7 +833,19 @@ function initCalibration() {
   var seedIds = Object.keys(c.tables).sort(numSort);
   var gridPos = gridPositions(seedIds);
 
-  tblsRef().once('value').then(function(snap) {
+  var ref = tblsRef();
+  if (!ref) {
+    /* Firebase unavailable — seed from config, show locally */
+    seedIds.forEach(function(id) {
+      tables[id] = makeTableRecord(id, gridPos[id].x, gridPos[id].y, c.tables[id].maxPax);
+    });
+    renderCalDots();
+    renderSidebar();
+    setSave('saved');
+    return;
+  }
+
+  ref.once('value').then(function(snap) {
     var existing = snap.val();
     tables = {};
 
@@ -1018,8 +1018,10 @@ function endDrag() {
 function savePosition(id) {
   var t = tables[id];
   if (!t) return;
+  var ref = tblsRef();
+  if (!ref) { setSave('saved'); return; }
   setSave('saving');
-  tblsRef().child(id).update({ x: t.x, y: t.y }).then(function() {
+  ref.child(id).update({ x: t.x, y: t.y }).then(function() {
     setSave('saved');
   }).catch(function() {
     setSave('err');
@@ -1058,16 +1060,22 @@ function saveModal() {
     tables[modalId].minPax = minP;
   }
 
-  setSave('saving');
-  var id = modalId;
-  tblsRef().child(id).update({ maxPax: maxP, minPax: minP }).then(function() {
-    setSave('saved');
-    showToast('Table ' + id + ' saved', 'ok');
+  var id  = modalId;
+  var ref = tblsRef();
+  if (!ref) {
+    showToast('Table ' + id + ' saved (local only)', 'ok');
     renderSidebar();
-  }).catch(function() {
-    setSave('err');
-    showToast('Save failed', 'err');
-  });
+  } else {
+    setSave('saving');
+    ref.child(id).update({ maxPax: maxP, minPax: minP }).then(function() {
+      setSave('saved');
+      showToast('Table ' + id + ' saved', 'ok');
+      renderSidebar();
+    }).catch(function() {
+      setSave('err');
+      showToast('Save failed', 'err');
+    });
+  }
 
   closeModal();
 }
@@ -1086,8 +1094,14 @@ function initSeating() {
   document.getElementById('seat-bg').src = c.backgroundImageUrl;
 
   detachSeatListener();
-  seatListenerRef = tblsRef();
-  seatListener    = seatListenerRef.on('value', function(snap) {
+  var ref = tblsRef();
+  if (!ref) {
+    /* No Firebase — show whatever tables are in local memory */
+    renderSeatDots();
+    return;
+  }
+  seatListenerRef = ref;
+  seatListener    = ref.on('value', function(snap) {
     tables = {};
     var data = snap.val();
     if (data) {
@@ -1129,10 +1143,37 @@ document.addEventListener('keydown', function(e) {
 /* ================================================================
    BOOT
    ================================================================ */
-(function() {
+
+/* UI boots immediately — no Firebase dependency */
+document.addEventListener('DOMContentLoaded', function() {
   syncSwitcherButtons();
   goTo('overview');
-})();
+});
+
+/* Firebase connects after async SDK scripts succeed or fail */
+window.addEventListener('load', function() {
+  if (db !== null) return;  /* already initialised (fast CDN) */
+  try {
+    if (typeof firebase === 'undefined') { return; }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    db.ref('.info/connected').on('value', function(snap) {
+      var on  = snap.val() === true;
+      var cls = on ? 'conn-dot online' : 'conn-dot offline';
+      var lbl = on ? 'Live' : 'Offline';
+      ['conn-ov', 'conn-seat'].forEach(function(eid) {
+        document.getElementById(eid).className = cls;
+      });
+      document.getElementById('conn-lbl-ov').textContent   = lbl;
+      document.getElementById('conn-lbl-seat').textContent = lbl;
+    });
+    /* Re-init whichever page is active so it can load Firebase data */
+    if (activePage === 'calibration') initCalibration();
+    if (activePage === 'seating')     initSeating();
+  } catch (fbErr) {
+    console.warn('Firebase unavailable:', fbErr.message);
+  }
+});
 </script>
 </body>
 </html>
