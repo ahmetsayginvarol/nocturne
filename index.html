@@ -7504,6 +7504,12 @@ function showSeatModal(id) {
         ⊘ BLOCK TABLE
       </button>
       ${(_softBlockState(id) || (tState && tState.holdGroupId)) ? `
+      <button onclick="_changeReservationTime('${id}')"
+        style="background:transparent;border:1px solid rgba(201,168,76,0.4);color:rgba(201,168,76,0.8);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;margin-left:8px;"
+        onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'"
+        onmouseout="this.style.borderColor='rgba(201,168,76,0.4)';this.style.color='rgba(201,168,76,0.8)'">
+        ⏱ CHANGE TIME
+      </button>
       <button onclick="_confirmCancelReservation('${id}')"
         style="background:transparent;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.65);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;margin-left:8px;"
         onmouseover="this.style.borderColor='rgba(239,68,68,0.7)';this.style.color='#ef4444'"
@@ -14376,13 +14382,27 @@ function _reopenHoldModal(id) {
   closeModal();
 }
 
+// Resolve a table's hold-group id and open the time editor (used from the
+// seat modal footer, where we only have the table id).
+function _changeReservationTime(id) {
+  const sb = _softBlockState(id);
+  let groupId = sb && sb.group && sb.group.id;
+  if (!groupId && state.tables[id]) groupId = state.tables[id].holdGroupId;
+  if (!groupId) { setStatus('No reservation on this table'); return; }
+  _showHeldTimeEdit(id, groupId, 'seat');
+}
+
 // Inline editor to change a held group's reservation time.
-function _showHeldTimeEdit(id, groupId) {
+// backTarget: 'seat' returns to the seat modal, otherwise to the hold modal.
+function _showHeldTimeEdit(id, groupId, backTarget) {
   const group = state.softBlocks && state.softBlocks[groupId];
   if (!group) { setStatus('Reservation no longer exists'); closeModal(); return; }
   const d = new Date(group.targetTime);
   const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   const note = group.note || 'reservation';
+  const backFn = backTarget === 'seat'
+    ? 'showSeatModal(\'' + id + '\')'
+    : '_reopenHoldModal(\'' + id + '\')';
   openModal(
     '<h2 style="color:var(--gold)">⏱ CHANGE TIME</h2>' +
     '<div class="m-sub">Held for ' + note + '</div>' +
@@ -14392,13 +14412,13 @@ function _showHeldTimeEdit(id, groupId) {
         'style="background:var(--bg);border:1.5px solid var(--border2);color:var(--text);padding:10px 14px;border-radius:6px;font-family:\'DM Mono\',monospace;font-size:18px;text-align:center;outline:none;">' +
     '</div>' +
     '<div class="m-btns" style="margin-top:18px;">' +
-      '<button class="btn-p" onclick="_saveHeldTime(\'' + id + '\',\'' + groupId + '\')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">✓ SAVE</button>' +
-      '<button class="btn-s" onclick="_reopenHoldModal(\'' + id + '\')">← BACK</button>' +
+      '<button class="btn-p" onclick="_saveHeldTime(\'' + id + '\',\'' + groupId + '\',\'' + (backTarget || '') + '\')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">✓ SAVE</button>' +
+      '<button class="btn-s" onclick="' + backFn + '">← BACK</button>' +
     '</div>'
   );
 }
 
-function _saveHeldTime(id, groupId) {
+function _saveHeldTime(id, groupId, backTarget) {
   const group = state.softBlocks && state.softBlocks[groupId];
   if (!group) { setStatus('Reservation no longer exists'); closeModal(); return; }
   const val = (document.getElementById('held-time-edit') || {}).value;
@@ -14425,7 +14445,8 @@ function _saveHeldTime(id, groupId) {
   db.ref('eclipse/deck7/softBlocks/' + groupId).update(fbUpdate).catch(() => {});
   renderAll();
   setStatus('Reservation time updated to ' + _fmtHoldTime(newTarget));
-  _reopenHoldModal(id);
+  if (backTarget === 'seat') showSeatModal(id);
+  else _reopenHoldModal(id);
 }
 
 // Seat the entire hold group as one combined reservation — unblocks all tables,
