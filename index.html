@@ -5826,6 +5826,7 @@ function showMentionToast(sender, msg) {
 // ============================================================
 function showBroadcastSend(replyToKey, replyToMsg, replyToSender) {
   _bcSuggState = { step: 'none', size: null, reservation: null };
+  _bcSending = false; // reset send guard for a fresh compose
   _bcPendingPhoto = null; // discard any leftover photo from a previous cancelled compose
   const isReply = !!replyToKey;
   const replyContext = isReply ? `
@@ -5996,7 +5997,12 @@ function renderMessageWithMentions(text) {
   });
 }
 
+let _bcSending = false;
 function sendBroadcast() {
+  // Guard against double-send: on slow Wi-Fi the modal stays open until the
+  // push resolves, so an impatient user tapping SEND again would fire another
+  // push. Ignore taps while one is already in flight.
+  if (_bcSending) return;
   const ta = document.getElementById('bc-input');
   const msg = ta?.value.trim();
   if (!msg && !_bcPendingPhoto) return;
@@ -6017,9 +6023,18 @@ function sendBroadcast() {
   };
   if (_bcPendingPhoto) payload.photoData = _bcPendingPhoto;
 
+  _bcSending = true;
+  // Visually disable the send button so it's clear the tap registered
+  const sendBtn = document.querySelector('#modal .btn-p');
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '0.5'; sendBtn.style.pointerEvents = 'none'; }
+
   db.ref('eclipse/deck7/broadcasts').push(payload)
-    .then(() => { _bcClearPhoto(); closeModal(); setStatus(replyToKey ? 'Reply sent' : 'Broadcast sent to all tablets'); })
-    .catch(() => setStatus('Broadcast failed — check connection'));
+    .then(() => { _bcSending = false; _bcClearPhoto(); closeModal(); setStatus(replyToKey ? 'Reply sent' : 'Broadcast sent to all tablets'); })
+    .catch(() => {
+      _bcSending = false;
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = ''; sendBtn.style.pointerEvents = ''; }
+      setStatus('Broadcast failed — check connection');
+    });
 }
 
 // Track current broadcast for the reply button
