@@ -7496,20 +7496,28 @@ function showSeatModal(id) {
       <button class="btn-s" onclick="closeModal()">CANCEL</button>
     </div>
 
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border2);text-align:center;">
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border2);display:flex;flex-direction:column;gap:8px;">
       <button onclick="blockTableConfirm('${id}')"
-        style="background:transparent;border:1px solid var(--border2);color:var(--text-dim);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;"
+        style="width:100%;background:transparent;border:1px solid var(--border2);color:var(--text-dim);padding:9px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;"
         onmouseover="this.style.borderColor='var(--text-mid)';this.style.color='var(--text-mid)'"
         onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text-dim)'">
         ⊘ BLOCK TABLE
       </button>
       ${(_softBlockState(id) || (tState && tState.holdGroupId)) ? `
-      <button onclick="_confirmCancelReservation('${id}')"
-        style="background:transparent;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.65);padding:7px 14px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;transition:all 0.15s;margin-left:8px;"
-        onmouseover="this.style.borderColor='rgba(239,68,68,0.7)';this.style.color='#ef4444'"
-        onmouseout="this.style.borderColor='rgba(239,68,68,0.35)';this.style.color='rgba(239,68,68,0.65)'">
-        ✕ CANCEL RESERVATION
-      </button>` : ''}
+      <div style="display:flex;gap:8px;">
+        <button onclick="_changeReservationTime('${id}')"
+          style="flex:1;background:transparent;border:1px solid rgba(201,168,76,0.4);color:rgba(201,168,76,0.8);padding:9px 10px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.2px;cursor:pointer;transition:all 0.15s;"
+          onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'"
+          onmouseout="this.style.borderColor='rgba(201,168,76,0.4)';this.style.color='rgba(201,168,76,0.8)'">
+          ⏱ CHANGE TIME
+        </button>
+        <button onclick="_confirmCancelReservation('${id}')"
+          style="flex:1;background:transparent;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.65);padding:9px 10px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.2px;cursor:pointer;transition:all 0.15s;"
+          onmouseover="this.style.borderColor='rgba(239,68,68,0.7)';this.style.color='#ef4444'"
+          onmouseout="this.style.borderColor='rgba(239,68,68,0.35)';this.style.color='rgba(239,68,68,0.65)'">
+          ✕ CANCEL RESERVATION
+        </button>
+      </div>` : ''}
     </div>`;
 
   document.getElementById('modal').innerHTML = html;
@@ -7807,6 +7815,7 @@ function showBlockedModal(id) {
     <div class="m-btns" style="margin-top:16px;flex-wrap:wrap;gap:6px;">
       ${isHoldGroup
         ? `<button class="btn-p" onclick="unblockTable('${id}')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">🪑 SEAT RESERVATION</button>
+           <button class="btn-s" onclick="_showHeldTimeEdit('${id}','${tState.holdGroupId}')" style="border-color:rgba(201,168,76,0.5);color:var(--gold);">⏱ CHANGE TIME</button>
            <button class="btn-d" onclick="cancelHoldReservation('${id}')" style="border-color:rgba(239,68,68,0.7);color:#ef4444;">✕ CANCEL RESERVATION</button>`
         : (isBlocker
            ? `<button class="btn-p" onclick="unblockTable('${id}')">UNBLOCK & SEAT GUESTS</button>
@@ -9929,7 +9938,19 @@ function initFirebase() {
 
   // ── Soft block (Hold For Later) listener — real-time sync across tablets ──
   db.ref('eclipse/deck7/softBlocks').on('value', snap => {
-    state.softBlocks = snap.val() || {};
+    const sb = snap.val() || {};
+    // Detect reservation-time changes (CHANGE TIME) and clear this device's
+    // warning dedupe so the 45/10-min ticks re-evaluate against the new time.
+    for (const gid in sb) {
+      const g = sb[gid];
+      if (!g || typeof g.targetTime !== 'number') continue;
+      if (_lastHoldTargets[gid] !== undefined && _lastHoldTargets[gid] !== g.targetTime) {
+        ['10block', '45min', 'overdue', '20cancel'].forEach(k => _holdWarningsFired.delete(gid + ':' + k));
+      }
+      _lastHoldTargets[gid] = g.targetTime;
+    }
+    for (const gid in _lastHoldTargets) { if (!sb[gid]) delete _lastHoldTargets[gid]; }
+    state.softBlocks = sb;
     renderAll();
   });
 
@@ -14091,6 +14112,7 @@ function setStatus(msg) {
 // ============================================================
 let _pendingHoldGroup  = null;          // { ids, targetTime, note } awaiting risk confirmation
 let _holdWarningsFired = new Set();      // dedupe keys for the 60s warning tick
+let _lastHoldTargets   = {};             // gid → last seen targetTime, to detect CHANGE TIME edits
 
 // ── Time helpers ──────────────────────────────────────────────────────────
 function _fmtHoldTime(ms) {
@@ -14345,11 +14367,88 @@ function _showHeldModal(id, group) {
     '</div>' +
     '<div class="m-btns" style="margin-top:16px;flex-wrap:wrap;gap:6px;">' +
       seatBtn +
+      '<button class="btn-s" onclick="_showHeldTimeEdit(\'' + id + '\',\'' + group.id + '\')" style="border-color:rgba(201,168,76,0.5);color:var(--gold);">⏱ CHANGE TIME</button>' +
       (isReadyToSeat ? '' : '<button class="btn-d" onclick="softBlockOverride(\'' + group.id + '\',\'' + id + '\')">RELEASE THIS TABLE ONLY</button>') +
       '<button class="btn-d" onclick="cancelHoldReservation(\'' + id + '\')" style="border-color:rgba(239,68,68,0.7);color:#ef4444;">✕ CANCEL RESERVATION</button>' +
       '<button class="btn-s" onclick="closeModal()">CLOSE</button>' +
     '</div>'
   );
+}
+
+// Reopen whichever hold modal is appropriate for this table's current state.
+function _reopenHoldModal(id) {
+  const ts = state.tables[id];
+  if (ts && ts.blocked) { showBlockedModal(id); return; }
+  const sb = _softBlockState(id);
+  if (sb && sb.gstate === 'held') { _showHeldModal(id, sb.group); return; }
+  closeModal();
+}
+
+// Resolve a table's hold-group id and open the time editor (used from the
+// seat modal footer, where we only have the table id).
+function _changeReservationTime(id) {
+  const sb = _softBlockState(id);
+  let groupId = sb && sb.group && sb.group.id;
+  if (!groupId && state.tables[id]) groupId = state.tables[id].holdGroupId;
+  if (!groupId) { setStatus('No reservation on this table'); return; }
+  _showHeldTimeEdit(id, groupId, 'seat');
+}
+
+// Inline editor to change a held group's reservation time.
+// backTarget: 'seat' returns to the seat modal, otherwise to the hold modal.
+function _showHeldTimeEdit(id, groupId, backTarget) {
+  const group = state.softBlocks && state.softBlocks[groupId];
+  if (!group) { setStatus('Reservation no longer exists'); closeModal(); return; }
+  const d = new Date(group.targetTime);
+  const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const note = group.note || 'reservation';
+  const backFn = backTarget === 'seat'
+    ? 'showSeatModal(\'' + id + '\')'
+    : '_reopenHoldModal(\'' + id + '\')';
+  openModal(
+    '<h2 style="color:var(--gold)">⏱ CHANGE TIME</h2>' +
+    '<div class="m-sub">Held for ' + note + '</div>' +
+    '<div style="margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:6px;">' +
+      '<label style="font-size:11px;color:var(--text-dim);letter-spacing:.05em;">NEEDED AT</label>' +
+      '<input type="time" id="held-time-edit" value="' + hhmm + '" ' +
+        'style="background:var(--bg);border:1.5px solid var(--border2);color:var(--text);padding:10px 14px;border-radius:6px;font-family:\'DM Mono\',monospace;font-size:18px;text-align:center;outline:none;">' +
+    '</div>' +
+    '<div class="m-btns" style="margin-top:18px;">' +
+      '<button class="btn-p" onclick="_saveHeldTime(\'' + id + '\',\'' + groupId + '\',\'' + (backTarget || '') + '\')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">✓ SAVE</button>' +
+      '<button class="btn-s" onclick="' + backFn + '">← BACK</button>' +
+    '</div>'
+  );
+}
+
+function _saveHeldTime(id, groupId, backTarget) {
+  const group = state.softBlocks && state.softBlocks[groupId];
+  if (!group) { setStatus('Reservation no longer exists'); closeModal(); return; }
+  const val = (document.getElementById('held-time-edit') || {}).value;
+  if (!val) { setStatus('Pick a valid time'); return; }
+  const newTarget = _parseHoldTimeToToday(val);
+
+  group.targetTime = newTarget;
+  // Reset urgency flags so the 45/10-min ticks re-evaluate against the new time.
+  // The softBlocks listener does the same on every other device (see below).
+  delete group.at45;
+  if (_holdWarningsFired) {
+    ['10block', '45min', 'overdue', '20cancel'].forEach(k => _holdWarningsFired.delete(groupId + ':' + k));
+  }
+
+  // If the group was pushed back out beyond 10 min, return it to active so the
+  // ticks treat it as a normal upcoming reservation again.
+  const minsUntil = Math.round((newTarget - Date.now()) / 60000);
+  const fbUpdate = { targetTime: newTarget, at45: null };
+  if (group.status === 'triggered' && minsUntil > 10) {
+    group.status = 'active';
+    fbUpdate.status = 'active';
+  }
+
+  db.ref('eclipse/deck7/softBlocks/' + groupId).update(fbUpdate).catch(() => {});
+  renderAll();
+  setStatus('Reservation time updated to ' + _fmtHoldTime(newTarget));
+  if (backTarget === 'seat') showSeatModal(id);
+  else _reopenHoldModal(id);
 }
 
 // Seat the entire hold group as one combined reservation — unblocks all tables,
