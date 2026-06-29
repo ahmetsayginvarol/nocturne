@@ -4,31 +4,54 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sun Princess Restaurants</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Cinzel:wght@400;600&display=swap" rel="stylesheet">
   <style>
+    /* Font import — copied from Nocturne index.html (Midnight Atelier design language) */
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cinzel:wght@400;600&display=swap');
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ----------------------------------------------------------------
+       Root variables — copied verbatim from Nocturne index.html :root
+       (lines 206-229) with additions for this app noted inline.
+       ---------------------------------------------------------------- */
     :root {
-      --bg:        #080c14;
-      --panel:     #0e1520;
-      --card:      #131d2e;
-      --border:    #1a2840;
-      --border2:   #243552;
-      --text:      #d8e4f0;
-      --text-dim:  #5a7090;
-      --text-mid:  #8da4be;
-      --gold:      #c9a84c;
-      --teal:      #2dd4bf;
-      --red:       #e63946;
-      --dot-size:  32px;
+      /* Core palette — Nocturne verbatim */
+      --bg:          #080c14;
+      --panel:       #0e1520;
+      --card:        #131d2e;
+      --border:      #1a2840;
+      --border2:     #243552;
+      --text:        #d8e4f0;
+      --text-dim:    #5a7090;
+      --text-mid:    #8da4be;
+      --gold:        #c9a84c;
+      --gold-dim:    rgba(201,168,76,0.15);
+      /* Seating-period colors — Nocturne verbatim (wired up in a later stage) */
+      --s1:          #f4a261;
+      --s1-bg:       rgba(244,162,97,0.85);
+      --s2:          #e63946;
+      --s2-bg:       rgba(230,57,70,0.85);
+      --s3:          #7b2fbe;
+      --s3-bg:       rgba(123,47,190,0.85);
+      --s4:          #d4af37;
+      --s4-bg:       rgba(212,175,55,0.9);
+      /* Available-table marker — Nocturne verbatim (not used for dots in
+         this app; this app uses solid teal for open tables) */
+      --avail:        rgba(15,35,70,0.72);
+      --avail-border: rgba(80,140,220,0.9);
+      --teal:         #2dd4bf;
+      /* #ef4444 — Nocturne's reserved/held border color, used in
+         .tm.soft-block-held and station-manager close buttons */
+      --reserved:     #ef4444;
+      /* Dot diameter — single constant; tune here to fit floor plan density */
+      --dot-size:     18px;
     }
 
     html, body {
       height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: 'DM Mono', monospace;
+      font-family: 'DM Mono', 'Courier New', monospace;
       overflow: hidden;
     }
 
@@ -312,46 +335,70 @@
     .sb-row.placed .sb-dot { background: var(--teal); }
 
     /* ---- TABLE DOTS ---- */
+    /* Base structure — mirrors Nocturne .tm (index.html line 2080) */
     .table-dot {
       position: absolute;
       width: var(--dot-size);
       height: var(--dot-size);
       border-radius: 50%;
-      background: rgba(45, 212, 191, 0.18);
-      border: 2px solid var(--teal);
+      transform: translate(-50%, -50%);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 10px;
-      font-weight: 500;
-      color: var(--teal);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
       cursor: grab;
-      transform: translate(-50%, -50%);
       user-select: none;
+      -webkit-user-select: none;
       touch-action: none;
-      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-      will-change: transform;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.12s, box-shadow 0.12s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      /* Open/available: solid teal fill, dark text */
+      background: var(--teal);
+      border: 2px solid rgba(45,212,191,0.55);
+      color: var(--bg);
     }
     .table-dot:hover {
-      background: rgba(45, 212, 191, 0.35);
-      box-shadow: 0 0 10px rgba(45, 212, 191, 0.35);
+      transform: translate(-50%, -50%) scale(1.45);
+      z-index: 15;
+      box-shadow: 0 0 10px rgba(45,212,191,0.55), 0 2px 8px rgba(0,0,0,0.5);
     }
     .table-dot.dragging {
       cursor: grabbing;
-      box-shadow: 0 0 16px rgba(45, 212, 191, 0.55);
       z-index: 50;
+      box-shadow: 0 0 14px rgba(45,212,191,0.7), 0 2px 8px rgba(0,0,0,0.5);
     }
+    /* Occupied: teal-family placeholder — period coloring added with seating actions */
     .table-dot.occupied {
-      background: rgba(230, 57, 70, 0.18);
-      border-color: var(--red);
-      color: var(--red);
+      background: var(--teal);
+      border-color: rgba(45,212,191,0.55);
+      color: var(--bg);
     }
-    .table-dot.occupied:hover {
-      background: rgba(230, 57, 70, 0.35);
-      box-shadow: 0 0 10px rgba(230, 57, 70, 0.35);
+    /* Reserved/held — diagonal stripe pattern from Nocturne .tm.soft-block-held
+       (index.html line 1788). Stripe: rgba(220,38,38,0.92) on rgba(12,28,62,0.95).
+       Border: #ef4444 (Nocturne's reserved border color, index.html line 1795). */
+    .table-dot.reserved {
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(220,38,38,0.92) 0px,
+        rgba(220,38,38,0.92) 4px,
+        rgba(12,28,62,0.95)  4px,
+        rgba(12,28,62,0.95)  9px
+      );
+      border: 2px solid #ef4444;
+      color: #fff;
+      font-weight: 700;
     }
-    /* seating-only: no grab cursor */
+    .table-dot.reserved:hover {
+      box-shadow: 0 0 10px rgba(239,68,68,0.55), 0 2px 8px rgba(0,0,0,0.5);
+    }
+    /* Seating page: no grab cursor */
     .dot-static { cursor: default; }
+    .dot-static:hover {
+      transform: translate(-50%, -50%) scale(1.3);
+    }
 
     /* ---- SEATING PAGE ---- */
     .seating-body {
