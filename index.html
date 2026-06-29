@@ -7807,6 +7807,7 @@ function showBlockedModal(id) {
     <div class="m-btns" style="margin-top:16px;flex-wrap:wrap;gap:6px;">
       ${isHoldGroup
         ? `<button class="btn-p" onclick="unblockTable('${id}')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">🪑 SEAT RESERVATION</button>
+           <button class="btn-s" onclick="_showHeldTimeEdit('${id}','${tState.holdGroupId}')" style="border-color:rgba(201,168,76,0.5);color:var(--gold);">⏱ CHANGE TIME</button>
            <button class="btn-d" onclick="cancelHoldReservation('${id}')" style="border-color:rgba(239,68,68,0.7);color:#ef4444;">✕ CANCEL RESERVATION</button>`
         : (isBlocker
            ? `<button class="btn-p" onclick="unblockTable('${id}')">UNBLOCK & SEAT GUESTS</button>
@@ -9929,7 +9930,19 @@ function initFirebase() {
 
   // ── Soft block (Hold For Later) listener — real-time sync across tablets ──
   db.ref('eclipse/deck7/softBlocks').on('value', snap => {
-    state.softBlocks = snap.val() || {};
+    const sb = snap.val() || {};
+    // Detect reservation-time changes (CHANGE TIME) and clear this device's
+    // warning dedupe so the 45/10-min ticks re-evaluate against the new time.
+    for (const gid in sb) {
+      const g = sb[gid];
+      if (!g || typeof g.targetTime !== 'number') continue;
+      if (_lastHoldTargets[gid] !== undefined && _lastHoldTargets[gid] !== g.targetTime) {
+        ['10block', '45min', 'overdue', '20cancel'].forEach(k => _holdWarningsFired.delete(gid + ':' + k));
+      }
+      _lastHoldTargets[gid] = g.targetTime;
+    }
+    for (const gid in _lastHoldTargets) { if (!sb[gid]) delete _lastHoldTargets[gid]; }
+    state.softBlocks = sb;
     renderAll();
   });
 
@@ -14091,6 +14104,7 @@ function setStatus(msg) {
 // ============================================================
 let _pendingHoldGroup  = null;          // { ids, targetTime, note } awaiting risk confirmation
 let _holdWarningsFired = new Set();      // dedupe keys for the 60s warning tick
+let _lastHoldTargets   = {};             // gid → last seen targetTime, to detect CHANGE TIME edits
 
 // ── Time helpers ──────────────────────────────────────────────────────────
 function _fmtHoldTime(ms) {
@@ -14353,6 +14367,15 @@ function _showHeldModal(id, group) {
   );
 }
 
+// Reopen whichever hold modal is appropriate for this table's current state.
+function _reopenHoldModal(id) {
+  const ts = state.tables[id];
+  if (ts && ts.blocked) { showBlockedModal(id); return; }
+  const sb = _softBlockState(id);
+  if (sb && sb.gstate === 'held') { _showHeldModal(id, sb.group); return; }
+  closeModal();
+}
+
 // Inline editor to change a held group's reservation time.
 function _showHeldTimeEdit(id, groupId) {
   const group = state.softBlocks && state.softBlocks[groupId];
@@ -14370,7 +14393,7 @@ function _showHeldTimeEdit(id, groupId) {
     '</div>' +
     '<div class="m-btns" style="margin-top:18px;">' +
       '<button class="btn-p" onclick="_saveHeldTime(\'' + id + '\',\'' + groupId + '\')" style="background:rgba(201,168,76,0.18);border-color:var(--gold);color:var(--gold);">✓ SAVE</button>' +
-      '<button class="btn-s" onclick="_showHeldModal(\'' + id + '\',state.softBlocks[\'' + groupId + '\'])">← BACK</button>' +
+      '<button class="btn-s" onclick="_reopenHoldModal(\'' + id + '\')">← BACK</button>' +
     '</div>'
   );
 }
@@ -14383,16 +14406,26 @@ function _saveHeldTime(id, groupId) {
   const newTarget = _parseHoldTimeToToday(val);
 
   group.targetTime = newTarget;
-  // Reset urgency flags so warnings re-evaluate against the new time
+  // Reset urgency flags so the 45/10-min ticks re-evaluate against the new time.
+  // The softBlocks listener does the same on every other device (see below).
   delete group.at45;
   if (_holdWarningsFired) {
     ['10block', '45min', 'overdue', '20cancel'].forEach(k => _holdWarningsFired.delete(groupId + ':' + k));
   }
 
-  db.ref('eclipse/deck7/softBlocks/' + groupId).update({ targetTime: newTarget, at45: null }).catch(() => {});
+  // If the group was pushed back out beyond 10 min, return it to active so the
+  // ticks treat it as a normal upcoming reservation again.
+  const minsUntil = Math.round((newTarget - Date.now()) / 60000);
+  const fbUpdate = { targetTime: newTarget, at45: null };
+  if (group.status === 'triggered' && minsUntil > 10) {
+    group.status = 'active';
+    fbUpdate.status = 'active';
+  }
+
+  db.ref('eclipse/deck7/softBlocks/' + groupId).update(fbUpdate).catch(() => {});
   renderAll();
   setStatus('Reservation time updated to ' + _fmtHoldTime(newTarget));
-  _showHeldModal(id, group);
+  _reopenHoldModal(id);
 }
 
 // Seat the entire hold group as one combined reservation — unblocks all tables,
