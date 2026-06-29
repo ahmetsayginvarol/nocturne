@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sun Princess Restaurants</title>
+  <style>
+    /* Font import — copied from Nocturne index.html (Midnight Atelier design language) */
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cinzel:wght@400;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ----------------------------------------------------------------
+       Root variables — copied verbatim from Nocturne index.html :root
+       (lines 206-229) with additions for this app noted inline.
+       ---------------------------------------------------------------- */
+    :root {
+      /* Core palette — Nocturne verbatim */
+      --bg:          #080c14;
+      --panel:       #0e1520;
+      --card:        #131d2e;
+      --border:      #1a2840;
+      --border2:     #243552;
+      --text:        #d8e4f0;
+      --text-dim:    #5a7090;
+      --text-mid:    #8da4be;
+      --gold:        #c9a84c;
+      --gold-dim:    rgba(201,168,76,0.15);
+      /* Seating-period colors — Nocturne verbatim (wired up in a later stage) */
+      --s1:          #f4a261;
+      --s1-bg:       rgba(244,162,97,0.85);
+      --s2:          #e63946;
+      --s2-bg:       rgba(230,57,70,0.85);
+      --s3:          #7b2fbe;
+      --s3-bg:       rgba(123,47,190,0.85);
+      --s4:          #d4af37;
+      --s4-bg:       rgba(212,175,55,0.9);
+      /* Available-table marker — Nocturne verbatim (not used for dots in
+         this app; this app uses solid teal for open tables) */
+      --avail:        rgba(15,35,70,0.72);
+      --avail-border: rgba(80,140,220,0.9);
+      --teal:         #2dd4bf;
+      /* #ef4444 — Nocturne's reserved/held border color, used in
+         .tm.soft-block-held and station-manager close buttons */
+      --reserved:     #ef4444;
+      /* Dot diameter — single constant; tune here to fit floor plan density */
+      --dot-size:     18px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', 'Courier New', monospace;
+      overflow: hidden;
+    }
+
+    /* ---- PAGE SYSTEM ---- */
+    .page {
+      position: fixed;
+      inset: 0;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      z-index: 1;
+      transition: opacity 0.22s ease, visibility 0s linear 0.22s;
+      overflow-y: auto;
+    }
+    .page.active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      z-index: 10;
+      transition: opacity 0.22s ease, visibility 0s linear 0s;
+    }
+    #page-calibration,
+    #page-seating {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ---- SHARED HEADER ---- */
+    .app-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 24px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .hdr-title {
+      font-family: 'Cinzel', serif;
+      font-size: 17px;
+      color: var(--gold);
+      letter-spacing: 0.05em;
+    }
+    .hdr-sub {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+    .hdr-spacer { flex: 1; }
+
+    /* ---- RESTAURANT SWITCHER ---- */
+    .rest-switch {
+      display: flex;
+      gap: 3px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px;
+    }
+    .rest-btn {
+      padding: 5px 14px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-dim);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .rest-btn.sel {
+      background: var(--card);
+      color: var(--gold);
+      border-color: var(--border2);
+    }
+
+    /* ---- GENERIC BUTTONS ---- */
+    .btn {
+      padding: 6px 16px;
+      border-radius: 5px;
+      border: 1px solid var(--border2);
+      background: var(--card);
+      color: var(--text-mid);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--border2); color: var(--text); }
+    .btn.teal  { border-color: var(--teal); color: var(--teal); }
+    .btn.teal:hover { background: var(--teal); color: var(--bg); }
+    .btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    .btn:disabled:hover {
+      background: var(--card);
+      color: var(--text-mid);
+      border-color: var(--border2);
+    }
+
+    /* ---- CONNECTION BADGE ---- */
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .conn-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.3s;
+      flex-shrink: 0;
+    }
+    .conn-dot.online  { background: var(--teal); }
+    .conn-dot.offline { background: var(--red); }
+
+    /* ---- OVERVIEW PAGE ---- */
+    .overview-body {
+      padding: 28px 32px 48px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      max-width: 1100px;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .stat-value {
+      font-family: 'Cinzel', serif;
+      font-size: 30px;
+      color: var(--gold);
+    }
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+    .full-col { grid-column: 1 / -1; }
+    .timeslot-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+    .section-title {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .timeslot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+    }
+    .ts-pill {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      text-align: center;
+    }
+    .ts-time  { font-size: 13px; color: var(--text-mid); }
+    .ts-count { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+    .action-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    /* ---- CALIBRATION PAGE ---- */
+    .cal-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .cal-hint {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .save-indicator {
+      font-size: 11px;
+      color: var(--text-dim);
+      transition: color 0.2s;
+      white-space: nowrap;
+    }
+    .save-indicator.saving { color: var(--gold); }
+    .save-indicator.saved  { color: var(--teal); }
+    .save-indicator.err    { color: var(--red); }
+
+    .cal-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      overflow: hidden;
+    }
+    .cal-canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #111;
+    }
+    .bg-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      user-select: none;
+      display: block;
+    }
+    .cal-sidebar {
+      width: 210px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-head {
+      padding: 14px 14px 8px;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 8px;
+    }
+    .sb-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+    }
+    .sb-row:hover { background: var(--card); color: var(--text); }
+    .sb-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border2);
+      flex-shrink: 0;
+    }
+    .sb-row.placed { color: var(--teal); }
+    .sb-row.placed .sb-dot { background: var(--teal); }
+
+    /* ---- TABLE DOTS ---- */
+    /* Base structure — mirrors Nocturne .tm (index.html line 2080) */
+    .table-dot {
+      position: absolute;
+      width: var(--dot-size);
+      height: var(--dot-size);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.12s, box-shadow 0.12s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      /* Open/available: solid teal fill, dark text */
+      background: var(--teal);
+      border: 2px solid rgba(45,212,191,0.55);
+      color: var(--bg);
+    }
+    .table-dot:hover {
+      transform: translate(-50%, -50%) scale(1.45);
+      z-index: 15;
+      box-shadow: 0 0 10px rgba(45,212,191,0.55), 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .table-dot.dragging {
+      cursor: grabbing;
+      z-index: 50;
+      box-shadow: 0 0 14px rgba(45,212,191,0.7), 0 2px 8px rgba(0,0,0,0.5);
+    }
+    /* Occupied: teal-family placeholder — period coloring added with seating actions */
+    .table-dot.occupied {
+      background: var(--teal);
+      border-color: rgba(45,212,191,0.55);
+      color: var(--bg);
+    }
+    /* Reserved/held — diagonal stripe pattern from Nocturne .tm.soft-block-held
+       (index.html line 1788). Stripe: rgba(220,38,38,0.92) on rgba(12,28,62,0.95).
+       Border: #ef4444 (Nocturne's reserved border color, index.html line 1795). */
+    .table-dot.reserved {
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(220,38,38,0.92) 0px,
+        rgba(220,38,38,0.92) 4px,
+        rgba(12,28,62,0.95)  4px,
+        rgba(12,28,62,0.95)  9px
+      );
+      border: 2px solid #ef4444;
+      color: #fff;
+      font-weight: 700;
+    }
+    .table-dot.reserved:hover {
+      box-shadow: 0 0 10px rgba(239,68,68,0.55), 0 2px 8px rgba(0,0,0,0.5);
+    }
+    /* Seating page: no grab cursor */
+    .dot-static { cursor: default; }
+    .dot-static:hover {
+      transform: translate(-50%, -50%) scale(1.3);
+    }
+
+    /* ---- SEATING PAGE ---- */
+    .seating-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      overflow: hidden;
+    }
+    .seating-canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #111;
+    }
+    .guest-panel {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-head {
+      padding: 14px 16px 10px;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px 20px;
+      color: var(--text-dim);
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    /* ---- MODAL ---- */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 12, 20, 0.72);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.2s ease, visibility 0s linear 0.2s;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transition: opacity 0.2s ease, visibility 0s linear 0s;
+    }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 28px;
+      width: 310px;
+      max-width: 92vw;
+    }
+    .modal-title {
+      font-family: 'Cinzel', serif;
+      font-size: 15px;
+      color: var(--gold);
+      margin-bottom: 22px;
+    }
+    .form-row { margin-bottom: 14px; }
+    .form-label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus { border-color: var(--teal); }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      justify-content: flex-end;
+    }
+
+    /* ---- TOAST ---- */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 13px;
+      color: var(--text);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.2s ease, visibility 0s linear 0.2s, transform 0.2s ease;
+      z-index: 400;
+      white-space: nowrap;
+    }
+    .toast.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+      transition: opacity 0.2s ease, visibility 0s linear 0s, transform 0.2s ease;
+    }
+    .toast.ok  { border-color: var(--teal); color: var(--teal); }
+    .toast.err { border-color: var(--red);  color: var(--red); }
+
+    @media (max-width: 680px) {
+      .cal-sidebar, .guest-panel { display: none; }
+      .overview-body { grid-template-columns: 1fr; padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ================================================================
+     OVERVIEW PAGE
+     ================================================================ -->
+<div id="page-overview" class="page">
+  <div class="app-header">
+    <div>
+      <div class="hdr-title" id="ov-title">Sabatini's</div>
+      <div class="hdr-sub" id="ov-sub">DECK 8 &middot; A LA CARTE</div>
+    </div>
+    <div class="hdr-spacer"></div>
+    <div class="rest-switch">
+      <button class="rest-btn sel" id="btn-sab" onclick="switchRestaurant('sabatinis')">Sabatini's</button>
+      <button class="rest-btn"     id="btn-cg"  onclick="switchRestaurant('crownGrill')">Crown Grill</button>
+    </div>
+    <div class="conn-badge">
+      <div class="conn-dot" id="conn-ov"></div>
+      <span id="conn-lbl-ov">--</span>
+    </div>
+  </div>
+
+  <div class="overview-body">
+    <div class="stat-card">
+      <div class="stat-label">Total Seats</div>
+      <div class="stat-value" id="stat-seats">--</div>
+      <div class="stat-sub">configured capacity</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Covers Expected</div>
+      <div class="stat-value">--</div>
+      <div class="stat-sub">no reservation data yet</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Capacity Used</div>
+      <div class="stat-value">--</div>
+      <div class="stat-sub">pending import</div>
+    </div>
+
+    <div class="full-col timeslot-section">
+      <div class="section-title">Reservations by Time Slot</div>
+      <div class="timeslot-grid">
+        <div class="ts-pill"><div class="ts-time">5:30 PM</div><div class="ts-count">-- covers</div></div>
+        <div class="ts-pill"><div class="ts-time">6:00 PM</div><div class="ts-count">-- covers</div></div>
+        <div class="ts-pill"><div class="ts-time">6:30 PM</div><div class="ts-count">-- covers</div></div>
+        <div class="ts-pill"><div class="ts-time">7:00 PM</div><div class="ts-count">-- covers</div></div>
+        <div class="ts-pill"><div class="ts-time">7:30 PM</div><div class="ts-count">-- covers</div></div>
+        <div class="ts-pill"><div class="ts-time">8:00 PM</div><div class="ts-count">-- covers</div></div>
+        <div class="ts-pill"><div class="ts-time">8:30 PM</div><div class="ts-count">-- covers</div></div>
+        <div class="ts-pill"><div class="ts-time">9:00 PM</div><div class="ts-count">-- covers</div></div>
+      </div>
+    </div>
+
+    <div class="full-col action-bar">
+      <button class="btn" disabled title="Coming soon">Import CSV</button>
+      <button class="btn" disabled>Add Reservation</button>
+      <button class="btn teal" onclick="goTo('calibration')">Calibration Mode</button>
+      <button class="btn"      onclick="goTo('seating')">Seating Floor &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     CALIBRATION PAGE
+     ================================================================ -->
+<div id="page-calibration" class="page">
+  <div class="cal-toolbar">
+    <button class="btn" onclick="goTo('overview')">&larr; Back</button>
+    <span id="cal-title" style="font-size:13px;color:var(--text-mid);">Calibration</span>
+    <span class="cal-hint">Drag dots to correct positions &mdash; click to edit pax</span>
+    <div class="hdr-spacer"></div>
+    <span class="save-indicator saved" id="save-ind">All saved</span>
+    <button class="btn teal" onclick="goTo('overview')">Done Calibrating</button>
+  </div>
+
+  <div class="cal-body">
+    <div class="cal-canvas-wrap" id="cal-canvas">
+      <img class="bg-img" id="cal-bg" src="" alt="Floor plan" draggable="false">
+      <!-- dots injected by JS -->
+    </div>
+    <div class="cal-sidebar">
+      <div class="sidebar-head">Tables (<span id="sb-count">0</span>)</div>
+      <div class="sidebar-scroll" id="sb-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     SEATING PAGE
+     ================================================================ -->
+<div id="page-seating" class="page">
+  <div class="app-header">
+    <button class="btn" onclick="goTo('overview')">&larr; Back</button>
+    <span id="seat-title" style="font-size:13px;color:var(--text-mid);">Seating Floor</span>
+    <div class="hdr-spacer"></div>
+    <div class="conn-badge">
+      <div class="conn-dot" id="conn-seat"></div>
+      <span id="conn-lbl-seat">--</span>
+    </div>
+  </div>
+
+  <div class="seating-body">
+    <div class="seating-canvas-wrap" id="seat-canvas">
+      <img class="bg-img" id="seat-bg" src="" alt="Floor plan" draggable="false">
+      <!-- dots injected by JS -->
+    </div>
+    <div class="guest-panel">
+      <div class="panel-head">Guest List</div>
+      <div class="panel-empty">
+        No reservations loaded yet.<br>Import CSV or add reservations<br>from the Overview page.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     TABLE EDIT MODAL
+     ================================================================ -->
+<div class="modal-overlay" id="modal-tbl">
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-title" id="modal-tbl-title">Table --</div>
+    <div class="form-row">
+      <label class="form-label" for="inp-max">Max Pax</label>
+      <input class="form-input" type="number" id="inp-max" min="1" max="30" value="2">
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="inp-min">Min Pax</label>
+      <input class="form-input" type="number" id="inp-min" min="1" max="30" value="1">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn teal" onclick="saveModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDKs — async so CDN load time never blocks UI boot -->
+<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<script>
+'use strict';
+
+/* ================================================================
+   RESTAURANT CONFIG
+   ================================================================ */
+var RESTAURANT_CONFIG = {
+  sabatinis: {
+    displayName: "Sabatini's",
+    firebaseRoot: 'sabatinis',
+    backgroundImageUrl: 'sab.jpg',
+    deck: 8,
+    totalSeats: 104,
+    tables: {
+      '1': {maxPax:2},  '2': {maxPax:4},  '3': {maxPax:2},  '4': {maxPax:4},
+      '5': {maxPax:4},  '6': {maxPax:4},  '7': {maxPax:6},  '8': {maxPax:6},
+      '9': {maxPax:2},  '10':{maxPax:2},  '11':{maxPax:2},  '12':{maxPax:2},
+      '13':{maxPax:2},  '14':{maxPax:4},  '15':{maxPax:4},  '16':{maxPax:4},
+      '17':{maxPax:6},  '18':{maxPax:4},  '19':{maxPax:4},  '20':{maxPax:2},
+      '21':{maxPax:2},  '22':{maxPax:2},  '23':{maxPax:2},  '24':{maxPax:6},
+      '25':{maxPax:6},  '26':{maxPax:2},  '27':{maxPax:2},  '28':{maxPax:2},
+      '29':{maxPax:6},  '30':{maxPax:6},  '31':{maxPax:6}
+    }
+  },
+  crownGrill: {
+    displayName: 'Crown Grill',
+    firebaseRoot: 'crownGrill',
+    backgroundImageUrl: 'cg.jpg',
+    deck: 7,
+    totalSeats: 180,
+    /* Tables 13, 17, 57 intentionally absent — not on floor plan */
+    tables: {
+      '1': {maxPax:4},  '2': {maxPax:2},  '3': {maxPax:2},  '4': {maxPax:2},
+      '5': {maxPax:2},  '6': {maxPax:2},  '7': {maxPax:2},  '8': {maxPax:2},
+      '9': {maxPax:2},  '10':{maxPax:2},  '11':{maxPax:2},  '12':{maxPax:2},
+      '14':{maxPax:4},  '15':{maxPax:2},  '16':{maxPax:4},  '18':{maxPax:2},
+      '19':{maxPax:2},  '20':{maxPax:2},  '21':{maxPax:2},  '22':{maxPax:2},
+      '23':{maxPax:2},  '24':{maxPax:4},  '25':{maxPax:2},  '26':{maxPax:4},
+      '27':{maxPax:2},  '28':{maxPax:4},  '29':{maxPax:2},  '30':{maxPax:2},
+      '31':{maxPax:2},  '32':{maxPax:2},  '33':{maxPax:2},  '34':{maxPax:2},
+      '35':{maxPax:2},  '36':{maxPax:2},  '37':{maxPax:2},  '38':{maxPax:2},
+      '39':{maxPax:2},  '40':{maxPax:4},  '41':{maxPax:2},  '42':{maxPax:2},
+      '43':{maxPax:2},  '44':{maxPax:2},  '45':{maxPax:2},  '46':{maxPax:2},
+      '47':{maxPax:2},  '48':{maxPax:2},  '49':{maxPax:2},  '50':{maxPax:2},
+      '51':{maxPax:2},  '52':{maxPax:2},  '53':{maxPax:2},  '54':{maxPax:2},
+      '55':{maxPax:2},  '56':{maxPax:2},  '58':{maxPax:2},  '59':{maxPax:2},
+      '60':{maxPax:2},  '61':{maxPax:2},  '62':{maxPax:2},  '63':{maxPax:2},
+      '64':{maxPax:2},  '65':{maxPax:2},  '66':{maxPax:2},  '67':{maxPax:2},
+      '68':{maxPax:2},  '69':{maxPax:4},  '70':{maxPax:4},  '71':{maxPax:4},
+      '72':{maxPax:2},  '73':{maxPax:2},  '74':{maxPax:2},  '75':{maxPax:2},
+      '76':{maxPax:2},  '77':{maxPax:2},  '78':{maxPax:2},  '79':{maxPax:2},
+      '80':{maxPax:4},  '81':{maxPax:4}
+    }
+  }
+};
+
+/* ================================================================
+   FIREBASE INIT
+   ================================================================ */
+var firebaseConfig = {
+  apiKey:            'AIzaSyDNIpnIuJIF1guVUydbAmo_vV7OBNl3a28',
+  authDomain:        'eclipse-floor.firebaseapp.com',
+  databaseURL:       'https://eclipse-floor-default-rtdb.firebaseio.com',
+  projectId:         'eclipse-floor',
+  storageBucket:     'eclipse-floor.firebasestorage.app',
+  messagingSenderId: '726505687250',
+  appId:             '1:726505687250:web:4a80333510fa6308ec450b'
+};
+/* ================================================================
+   APP STATE
+   ================================================================ */
+var currentRest = localStorage.getItem('sunPrincessRest') || 'sabatinis';
+var tables      = {};   /* { [id]: { id, x, y, maxPax, minPax, occupyingReservationIds, ... } } */
+var activePage  = '';
+var db          = null;  /* set inside window.load once async SDK is ready */
+
+/* Listener bookkeeping */
+var seatListener    = null;
+var seatListenerRef = null;
+
+/* Drag state */
+var drag = {
+  on:     false,
+  id:     null,
+  startCX: 0, startCY: 0,
+  startX:  0, startY:  0,
+  moved:  false
+};
+
+/* Modal state */
+var modalId = null;
+
+/* Toast timer */
+var toastTimer = null;
+
+/* ================================================================
+   HELPERS
+   ================================================================ */
+function cfg() { return RESTAURANT_CONFIG[currentRest]; }
+function tblsRef() { return db ? db.ref(cfg().firebaseRoot + '/tables') : null; }
+
+function numSort(a, b) { return parseInt(a, 10) - parseInt(b, 10); }
+
+function gridPositions(ids) {
+  var n    = ids.length;
+  var cols = Math.ceil(Math.sqrt(n * 1.6));
+  if (cols < 1) cols = 1;
+  var rows = Math.ceil(n / cols);
+  if (rows < 1) rows = 1;
+  var pos = {};
+  ids.forEach(function(id, i) {
+    var col = i % cols;
+    var row = Math.floor(i / cols);
+    var xf  = cols > 1 ? col / (cols - 1) : 0.5;
+    var yf  = rows > 1 ? row / (rows - 1) : 0.5;
+    pos[id] = { x: 5 + xf * 90, y: 5 + yf * 90 };
+  });
+  return pos;
+}
+
+function showToast(msg, kind) {
+  clearTimeout(toastTimer);
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + (kind || '');
+  toastTimer = setTimeout(function() {
+    el.className = 'toast ' + (kind || '');
+  }, 2600);
+}
+
+function setSave(state) {
+  var el = document.getElementById('save-ind');
+  if (state === 'saving') { el.textContent = 'Saving...'; el.className = 'save-indicator saving'; }
+  else if (state === 'saved') { el.textContent = 'All saved'; el.className = 'save-indicator saved'; }
+  else { el.textContent = 'Save failed'; el.className = 'save-indicator err'; }
+}
+
+/* Connection status listener is set up inside the window.load Firebase init below */
+
+/* ================================================================
+   PAGE NAVIGATION
+   ================================================================ */
+function goTo(page) {
+  if (activePage === 'seating') detachSeatListener();
+
+  ['overview', 'calibration', 'seating'].forEach(function(p) {
+    var el = document.getElementById('page-' + p);
+    el.className = p === page ? 'page active' : 'page';
+  });
+  activePage = page;
+
+  if (page === 'overview')     initOverview();
+  if (page === 'calibration')  initCalibration();
+  if (page === 'seating')      initSeating();
+}
+
+/* ================================================================
+   RESTAURANT SWITCHING
+   ================================================================ */
+function switchRestaurant(key) {
+  if (key === currentRest) return;
+  currentRest = key;
+  localStorage.setItem('sunPrincessRest', key);
+  tables = {};
+  detachSeatListener();
+  syncSwitcherButtons();
+  initOverview();
+  if (activePage === 'calibration') initCalibration();
+  if (activePage === 'seating')     initSeating();
+}
+
+function syncSwitcherButtons() {
+  document.getElementById('btn-sab').className = currentRest === 'sabatinis'  ? 'rest-btn sel' : 'rest-btn';
+  document.getElementById('btn-cg').className  = currentRest === 'crownGrill' ? 'rest-btn sel' : 'rest-btn';
+}
+
+/* ================================================================
+   OVERVIEW PAGE
+   ================================================================ */
+function initOverview() {
+  var c = cfg();
+  document.getElementById('ov-title').textContent  = c.displayName;
+  document.getElementById('ov-sub').textContent    = 'DECK ' + c.deck + ' · A LA CARTE';
+  document.getElementById('stat-seats').textContent = c.totalSeats;
+  syncSwitcherButtons();
+}
+
+/* ================================================================
+   CALIBRATION PAGE
+   ================================================================ */
+function initCalibration() {
+  var c = cfg();
+  document.getElementById('cal-title').textContent = c.displayName + ' — Calibration';
+  document.getElementById('cal-bg').src = c.backgroundImageUrl;
+  setSave('saved');
+
+  var seedIds = Object.keys(c.tables).sort(numSort);
+  var gridPos = gridPositions(seedIds);
+
+  var ref = tblsRef();
+  if (!ref) {
+    /* Firebase unavailable — seed from config, show locally */
+    seedIds.forEach(function(id) {
+      tables[id] = makeTableRecord(id, gridPos[id].x, gridPos[id].y, c.tables[id].maxPax);
+    });
+    renderCalDots();
+    renderSidebar();
+    setSave('saved');
+    return;
+  }
+
+  ref.once('value').then(function(snap) {
+    var existing = snap.val();
+    tables = {};
+
+    if (existing) {
+      Object.keys(existing).forEach(function(id) {
+        tables[id] = existing[id];
+      });
+      /* Ensure any new seed tables are added without overwriting placed ones */
+      var updates = {};
+      seedIds.forEach(function(id) {
+        if (!tables[id]) {
+          tables[id] = makeTableRecord(id, gridPos[id].x, gridPos[id].y, c.tables[id].maxPax);
+          updates[id] = tables[id];
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        tblsRef().update(updates).catch(function() {});
+      }
+    } else {
+      /* First-time seed */
+      seedIds.forEach(function(id) {
+        tables[id] = makeTableRecord(id, gridPos[id].x, gridPos[id].y, c.tables[id].maxPax);
+      });
+      tblsRef().set(tables).catch(function() {});
+    }
+
+    renderCalDots();
+    renderSidebar();
+  }).catch(function() {
+    showToast('Could not load table data', 'err');
+  });
+}
+
+function makeTableRecord(id, x, y, maxPax) {
+  return {
+    id:  id,
+    x:   x,
+    y:   y,
+    maxPax: maxPax,
+    minPax: 1,
+    occupyingReservationIds: []
+    /* station field intentionally absent — add later without migration */
+  };
+}
+
+function renderCalDots() {
+  var canvas = document.getElementById('cal-canvas');
+  /* Remove old dots */
+  var old = canvas.querySelectorAll('.table-dot');
+  for (var i = 0; i < old.length; i++) { canvas.removeChild(old[i]); }
+
+  Object.keys(tables).sort(numSort).forEach(function(id) {
+    var t   = tables[id];
+    var dot = makeDot(id, t.x, t.y, false);
+
+    /* Mouse drag */
+    dot.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      startDrag(e.clientX, e.clientY, id);
+    });
+    /* Touch drag */
+    dot.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var t0 = e.touches[0];
+      startDrag(t0.clientX, t0.clientY, id);
+    }, {passive: false});
+
+    canvas.appendChild(dot);
+  });
+}
+
+function makeDot(id, xPct, yPct, occupied) {
+  var dot = document.createElement('div');
+  dot.className = 'table-dot' + (occupied ? ' occupied' : '');
+  dot.id = 'dot-' + id;
+  dot.textContent = id;
+  dot.style.left = xPct + '%';
+  dot.style.top  = yPct + '%';
+  return dot;
+}
+
+function renderSidebar() {
+  var list = document.getElementById('sb-list');
+  list.innerHTML = '';
+  var ids = Object.keys(tables).sort(numSort);
+  document.getElementById('sb-count').textContent = ids.length;
+
+  ids.forEach(function(id) {
+    var t   = tables[id];
+    var row = document.createElement('div');
+    row.className = 'sb-row placed';
+    row.innerHTML = '<div class="sb-dot"></div>T' + id + ' &mdash; ' + t.maxPax + ' pax';
+    row.addEventListener('click', function() { openModal(id); });
+    list.appendChild(row);
+  });
+}
+
+/* ================================================================
+   DRAG LOGIC (calibration only)
+   ================================================================ */
+function startDrag(cx, cy, id) {
+  drag.on     = true;
+  drag.id     = id;
+  drag.startCX = cx;
+  drag.startCY = cy;
+  drag.startX  = tables[id] ? tables[id].x : 50;
+  drag.startY  = tables[id] ? tables[id].y : 50;
+  drag.moved  = false;
+
+  var dot = document.getElementById('dot-' + id);
+  if (dot) dot.classList.add('dragging');
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup',   onUp);
+  document.addEventListener('touchmove', onTouchMove, {passive: false});
+  document.addEventListener('touchend',  onTouchUp);
+}
+
+function onMove(e)      { if (drag.on) moveDrag(e.clientX, e.clientY); }
+function onTouchMove(e) {
+  if (!drag.on) return;
+  e.preventDefault();
+  moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+}
+function onUp(e)      { if (drag.on) endDrag(); }
+function onTouchUp(e) { if (drag.on) endDrag(); }
+
+function moveDrag(cx, cy) {
+  var rect = document.getElementById('cal-canvas').getBoundingClientRect();
+  var dx   = cx - drag.startCX;
+  var dy   = cy - drag.startCY;
+
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+
+  var nx = drag.startX + (dx / rect.width)  * 100;
+  var ny = drag.startY + (dy / rect.height) * 100;
+  nx = Math.max(1, Math.min(99, nx));
+  ny = Math.max(1, Math.min(99, ny));
+
+  var dot = document.getElementById('dot-' + drag.id);
+  if (dot) { dot.style.left = nx + '%'; dot.style.top = ny + '%'; }
+
+  if (tables[drag.id]) { tables[drag.id].x = nx; tables[drag.id].y = ny; }
+}
+
+function endDrag() {
+  var id    = drag.id;
+  var moved = drag.moved;
+
+  drag.on = false;
+  drag.id = null;
+
+  var dot = document.getElementById('dot-' + id);
+  if (dot) dot.classList.remove('dragging');
+
+  document.removeEventListener('mousemove', onMove);
+  document.removeEventListener('mouseup',   onUp);
+  document.removeEventListener('touchmove', onTouchMove);
+  document.removeEventListener('touchend',  onTouchUp);
+
+  if (moved) {
+    savePosition(id);
+  } else {
+    openModal(id);
+  }
+}
+
+function savePosition(id) {
+  var t = tables[id];
+  if (!t) return;
+  var ref = tblsRef();
+  if (!ref) { setSave('saved'); return; }
+  setSave('saving');
+  ref.child(id).update({ x: t.x, y: t.y }).then(function() {
+    setSave('saved');
+  }).catch(function() {
+    setSave('err');
+    showToast('Position save failed', 'err');
+  });
+}
+
+/* ================================================================
+   TABLE EDIT MODAL
+   ================================================================ */
+function openModal(id) {
+  modalId = id;
+  var t = tables[id];
+  document.getElementById('modal-tbl-title').textContent = 'Table ' + id;
+  document.getElementById('inp-max').value = t ? t.maxPax : 2;
+  document.getElementById('inp-min').value = t ? (t.minPax || 1) : 1;
+  document.getElementById('modal-tbl').className = 'modal-overlay open';
+}
+
+function closeModal() {
+  document.getElementById('modal-tbl').className = 'modal-overlay';
+  modalId = null;
+}
+
+function saveModal() {
+  if (!modalId) return;
+  var maxP = parseInt(document.getElementById('inp-max').value, 10);
+  var minP = parseInt(document.getElementById('inp-min').value, 10);
+
+  if (isNaN(maxP) || maxP < 1)  { showToast('Invalid max pax', 'err'); return; }
+  if (isNaN(minP) || minP < 1)  { showToast('Invalid min pax', 'err'); return; }
+  if (minP > maxP)               { showToast('Min pax cannot exceed max pax', 'err'); return; }
+
+  if (tables[modalId]) {
+    tables[modalId].maxPax = maxP;
+    tables[modalId].minPax = minP;
+  }
+
+  var id  = modalId;
+  var ref = tblsRef();
+  if (!ref) {
+    showToast('Table ' + id + ' saved (local only)', 'ok');
+    renderSidebar();
+  } else {
+    setSave('saving');
+    ref.child(id).update({ maxPax: maxP, minPax: minP }).then(function() {
+      setSave('saved');
+      showToast('Table ' + id + ' saved', 'ok');
+      renderSidebar();
+    }).catch(function() {
+      setSave('err');
+      showToast('Save failed', 'err');
+    });
+  }
+
+  closeModal();
+}
+
+/* Close modal on overlay backdrop click */
+document.getElementById('modal-tbl').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+/* ================================================================
+   SEATING PAGE
+   ================================================================ */
+function initSeating() {
+  var c = cfg();
+  document.getElementById('seat-title').textContent = c.displayName + ' — Seating Floor';
+  document.getElementById('seat-bg').src = c.backgroundImageUrl;
+
+  detachSeatListener();
+  var ref = tblsRef();
+  if (!ref) {
+    /* No Firebase — show whatever tables are in local memory */
+    renderSeatDots();
+    return;
+  }
+  seatListenerRef = ref;
+  seatListener    = ref.on('value', function(snap) {
+    tables = {};
+    var data = snap.val();
+    if (data) {
+      Object.keys(data).forEach(function(id) { tables[id] = data[id]; });
+    }
+    renderSeatDots();
+  });
+}
+
+function detachSeatListener() {
+  if (seatListener && seatListenerRef) {
+    seatListenerRef.off('value', seatListener);
+    seatListener    = null;
+    seatListenerRef = null;
+  }
+}
+
+function renderSeatDots() {
+  var canvas = document.getElementById('seat-canvas');
+  var old = canvas.querySelectorAll('.table-dot');
+  for (var i = 0; i < old.length; i++) { canvas.removeChild(old[i]); }
+
+  Object.keys(tables).sort(numSort).forEach(function(id) {
+    var t = tables[id];
+    var occ = t.occupyingReservationIds && t.occupyingReservationIds.length > 0;
+    var dot = makeDot(id, t.x, t.y, occ);
+    dot.classList.add('dot-static');
+    canvas.appendChild(dot);
+  });
+}
+
+/* ================================================================
+   KEYBOARD: Escape closes modal
+   ================================================================ */
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' || e.keyCode === 27) closeModal();
+});
+
+/* ================================================================
+   BOOT
+   ================================================================ */
+
+/* UI boots immediately — no Firebase dependency */
+document.addEventListener('DOMContentLoaded', function() {
+  syncSwitcherButtons();
+  goTo('overview');
+});
+
+/* Firebase connects after async SDK scripts succeed or fail */
+window.addEventListener('load', function() {
+  if (db !== null) return;  /* already initialised (fast CDN) */
+  try {
+    if (typeof firebase === 'undefined') { return; }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    db.ref('.info/connected').on('value', function(snap) {
+      var on  = snap.val() === true;
+      var cls = on ? 'conn-dot online' : 'conn-dot offline';
+      var lbl = on ? 'Live' : 'Offline';
+      ['conn-ov', 'conn-seat'].forEach(function(eid) {
+        document.getElementById(eid).className = cls;
+      });
+      document.getElementById('conn-lbl-ov').textContent   = lbl;
+      document.getElementById('conn-lbl-seat').textContent = lbl;
+    });
+    /* Re-init whichever page is active so it can load Firebase data */
+    if (activePage === 'calibration') initCalibration();
+    if (activePage === 'seating')     initSeating();
+  } catch (fbErr) {
+    console.warn('Firebase unavailable:', fbErr.message);
+  }
+});
+</script>
+</body>
+</html>

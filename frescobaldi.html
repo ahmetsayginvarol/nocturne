@@ -1308,7 +1308,7 @@ function saveField(inp){
 
 let _gfId=null,_gfTitle='',_gfMembers=[];
 
-function _ttlCase(s){ return s?s.charAt(0).toUpperCase()+s.slice(1).toLowerCase():''; }
+function _ttlCase(s){ return s?s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):''; }
 function _parseName(r){
   const knownTitles=['Mr.','Mrs.','Ms.','Dr.','Mstr.','Miss'];
   const parts=(r.name||'').trim().split(/\s+/);
@@ -1686,6 +1686,11 @@ function toggleGuestDrawer(){
   overlay.classList.toggle('open',open);
   btn?.classList.toggle('active',open);
 }
+function closeGuestDrawer(){
+  document.getElementById('gp-drawer')?.classList.remove('open');
+  document.getElementById('gp-overlay')?.classList.remove('open');
+  document.getElementById('gp-toggle')?.classList.remove('active');
+}
 
 function toggleParty(id){
   if(!st._gpOpen) st._gpOpen={};
@@ -1736,6 +1741,8 @@ function renderGuestPanel(){
 
 function selGuest(id){
   st.selectedResId = st.selectedResId===id ? null : id;
+  // Selecting a party closes the drawer so the map is immediately reachable
+  if(st.selectedResId) closeGuestDrawer();
   updateSelBar(); renderGuestPanel(); renderDots();
 }
 
@@ -1836,9 +1843,7 @@ function togglePrepMode(){
   if(st.prepMode){
     // Deselect any live guest, close drawer
     st.selectedResId=null; updateSelBar();
-    document.getElementById('gp-drawer').classList.remove('open');
-    document.getElementById('gp-overlay').classList.remove('open');
-    document.getElementById('gp-toggle').classList.remove('active');
+    closeGuestDrawer();
     bindPrepDrag();
   } else {
     unbindPrepDrag();
@@ -2256,10 +2261,13 @@ function buildEnvelopes(jsPDF,guests){
   const envelopes=[];
   for(const grp of Object.values(groups)){
     if(grp.length===2){
-      // Two guests sharing a cabin → "Mr. Smith & Mrs. Johnson"
       const t1=grp[0].title||'Mr.',ln1=grp[0].lastName||'';
       const t2=grp[1].title||'Mrs.',ln2=grp[1].lastName||'';
-      envelopes.push({stateroom:grp[0].stateroom,names:[`${t1} ${ln1} & ${t2} ${ln2}`]});
+      // Same surname → "Mr. & Mrs. Smith"; different surnames → "Mr. Tanaka & Mrs. Rossi"
+      const line=(ln1.toUpperCase()===ln2.toUpperCase())
+        ? `${t1} & ${t2} ${ln1}`
+        : `${t1} ${ln1} & ${t2} ${ln2}`;
+      envelopes.push({stateroom:grp[0].stateroom,names:[line]});
     } else {
       // 1 person → full name; 3+ → individual envelopes each
       for(const g of grp){
