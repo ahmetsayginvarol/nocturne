@@ -1308,7 +1308,7 @@ function saveField(inp){
 
 let _gfId=null,_gfTitle='',_gfMembers=[];
 
-function _ttlCase(s){ return s?s.charAt(0).toUpperCase()+s.slice(1).toLowerCase():''; }
+function _ttlCase(s){ return s?s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):''; }
 function _parseName(r){
   const knownTitles=['Mr.','Mrs.','Ms.','Dr.','Mstr.','Miss'];
   const parts=(r.name||'').trim().split(/\s+/);
