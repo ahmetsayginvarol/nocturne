@@ -2148,12 +2148,13 @@ function buildLetters(jsPDF,guests,ev){
   const price=p.price||99,tax=p.tax||20;
   const director=p.director||'Peter Priestley';
 
-  // Flatten to one entry per individual guest
+  // Flatten to one entry per individual guest (names title-cased so compound
+  // last names like "Smith Browns" render fully capitalized)
   const individuals=[];
   for(const r of guests){
     const gs=(r.guests||[]).map(g=>typeof g==='string'?{name:g,stateroom:r.stateroom}:g);
-    if(gs.length) individuals.push(...gs.map(g=>({name:g.name,stateroom:g.stateroom||r.stateroom})));
-    else individuals.push({name:r.name,stateroom:r.stateroom});
+    if(gs.length) individuals.push(...gs.map(g=>({name:_ttlCase(g.name),stateroom:g.stateroom||r.stateroom})));
+    else individuals.push({name:_ttlCase(r.name),stateroom:r.stateroom});
   }
 
   individuals.forEach((person,gi)=>{
@@ -2246,7 +2247,7 @@ function buildEnvelopes(jsPDF,guests){
       const parts=(g.name||'').trim().split(/\s+/);
       const title=g.title||(knownTitles.includes(parts[0])?parts[0]:'');
       const rawLn=g.lastName||'';
-      const lastName=rawLn?rawLn.charAt(0).toUpperCase()+rawLn.slice(1).toLowerCase():parts[parts.length-1]||'';
+      const lastName=_ttlCase(rawLn||parts[parts.length-1]||'');
       const firstName=g.firstName||'';
       individuals.push({stateroom:g.stateroom||r.stateroom,title,firstName,lastName,name:g.name||r.name||''});
     }
