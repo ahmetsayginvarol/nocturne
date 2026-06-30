@@ -798,8 +798,24 @@ var editor = {
   action:     null,     /* null | 'move' | 'resize-nw' | ... | 'rotate' */
   ptStartX: 0, ptStartY: 0,
   snapX: 0, snapY: 0, snapW: 0, snapH: 0, snapRot: 0,
-  snapCX: 0, snapCY: 0   /* canvas-px center at drag start (for rotate) */
+  snapCX: 0, snapCY: 0   /* viewport-px center at drag start (for rotate) */
 };
+
+/* Returns the bounding box of the rendered image inside its canvas element,
+   accounting for object-fit:contain letterboxing/pillarboxing.
+   All table x/y/width/height are stored as % of these bounds so that
+   positions are consistent across every screen size and aspect ratio. */
+function getImageBounds(imgEl, canvasEl) {
+  var cw = canvasEl.clientWidth;
+  var ch = canvasEl.clientHeight;
+  var iw = imgEl ? imgEl.naturalWidth  : 0;
+  var ih = imgEl ? imgEl.naturalHeight : 0;
+  if (!iw || !ih) { return { x: 0, y: 0, w: cw, h: ch, cw: cw, ch: ch }; }
+  var scale = Math.min(cw / iw, ch / ih);
+  var rw = iw * scale;
+  var rh = ih * scale;
+  return { x: (cw - rw) / 2, y: (ch - rh) / 2, w: rw, h: rh, cw: cw, ch: ch };
+}
 
 /* Toast timer */
 var toastTimer = null;
@@ -941,8 +957,9 @@ function onCanvasClick(e) {
   if (e.target !== canvas && e.target !== bg) return;
   if (editor.mode === 'placing') {
     var rect = canvas.getBoundingClientRect();
-    var xPct = (e.clientX - rect.left) / rect.width  * 100;
-    var yPct = (e.clientY - rect.top)  / rect.height * 100;
+    var b    = getImageBounds(bg, canvas);
+    var xPct = Math.max(0, Math.min(100, (e.clientX - rect.left - b.x) / b.w * 100));
+    var yPct = Math.max(0, Math.min(100, (e.clientY - rect.top  - b.y) / b.h * 100));
     placeNewTable(xPct, yPct);
     exitPlacementMode();
   } else if (editor.mode === 'editing') {
@@ -1129,11 +1146,19 @@ function buildShapeEl(id) {
   return wrap;
 }
 
-function applyShapeGeometry(wrap, t) {
-  wrap.style.left      = t.x + '%';
-  wrap.style.top       = t.y + '%';
-  wrap.style.width     = t.width + '%';
-  wrap.style.height    = t.height + '%';
+function applyShapeGeometry(wrap, t, canvasId) {
+  var cvs  = document.getElementById(canvasId || 'cal-canvas');
+  var img  = cvs ? cvs.querySelector('.bg-img') : null;
+  var b    = getImageBounds(img, cvs || { clientWidth: 100, clientHeight: 100 });
+  /* Convert image-relative % to canvas-relative % for CSS */
+  var left = (b.x + t.x / 100 * b.w) / b.cw * 100;
+  var top  = (b.y + t.y / 100 * b.h) / b.ch * 100;
+  var wPct = t.width  / 100 * b.w / b.cw * 100;
+  var hPct = t.height / 100 * b.h / b.ch * 100;
+  wrap.style.left      = left + '%';
+  wrap.style.top       = top  + '%';
+  wrap.style.width     = wPct + '%';
+  wrap.style.height    = hPct + '%';
   wrap.style.transform = 'translate(-50%,-50%) rotate(' + (t.rotation || 0) + 'deg)';
 }
 
@@ -1337,8 +1362,9 @@ function startEditorDrag(cx, cy, id, action) {
   editor.snapH    = t.height;
   editor.snapRot  = t.rotation || 0;
   var rect = document.getElementById('cal-canvas').getBoundingClientRect();
-  editor.snapCX = rect.left + t.x / 100 * rect.width;
-  editor.snapCY = rect.top  + t.y / 100 * rect.height;
+  var b0   = getImageBounds(document.getElementById('cal-bg'), document.getElementById('cal-canvas'));
+  editor.snapCX = rect.left + b0.x + t.x / 100 * b0.w;
+  editor.snapCY = rect.top  + b0.y + t.y / 100 * b0.h;
   document.addEventListener('mousemove', onEditorMove);
   document.addEventListener('mouseup',   onEditorUp);
   document.addEventListener('touchmove', onEditorTouchMove, {passive: false});
@@ -1355,9 +1381,9 @@ function applyEditorDrag(cx, cy) {
   if (!id || !editor.action) return;
   var t = tables[id];
   if (!t) return;
-  var rect = document.getElementById('cal-canvas').getBoundingClientRect();
-  var dxPct = (cx - editor.ptStartX) / rect.width  * 100;
-  var dyPct = (cy - editor.ptStartY) / rect.height * 100;
+  var b    = getImageBounds(document.getElementById('cal-bg'), document.getElementById('cal-canvas'));
+  var dxPct = (cx - editor.ptStartX) / b.w * 100;
+  var dyPct = (cy - editor.ptStartY) / b.h * 100;
   var act   = editor.action;
 
   if (act === 'move') {
@@ -1570,11 +1596,7 @@ function renderSeatShapes() {
     var wrap = document.createElement('div');
     wrap.className = 'tbl-wrap' + (occ ? ' occupied' : '');
     wrap.id = 'seat-tbl-' + id;
-    wrap.style.left      = t.x + '%';
-    wrap.style.top       = t.y + '%';
-    wrap.style.width     = t.width + '%';
-    wrap.style.height    = t.height + '%';
-    wrap.style.transform = 'translate(-50%,-50%) rotate(' + (t.rotation || 0) + 'deg)';
+    applyShapeGeometry(wrap, t, 'seat-canvas');
     wrap.style.cursor    = 'default';
     var body = document.createElement('div');
     body.className = 'tbl-body ' + (t.shape || 'circle');
@@ -1586,6 +1608,29 @@ function renderSeatShapes() {
     canvas.appendChild(wrap);
   });
 }
+
+/* ================================================================
+   RESIZE: re-apply geometry so image-relative coords stay aligned
+   ================================================================ */
+function refreshAllShapeGeometry() {
+  var cal = document.getElementById('cal-canvas');
+  if (cal) {
+    var calWraps = cal.querySelectorAll('.tbl-wrap');
+    for (var i = 0; i < calWraps.length; i++) {
+      var cid = calWraps[i].id.replace('tbl-', '');
+      if (tables[cid]) applyShapeGeometry(calWraps[i], tables[cid], 'cal-canvas');
+    }
+  }
+  var seat = document.getElementById('seat-canvas');
+  if (seat) {
+    var sWraps = seat.querySelectorAll('.tbl-wrap');
+    for (var j = 0; j < sWraps.length; j++) {
+      var sid = sWraps[j].id.replace('seat-tbl-', '');
+      if (tables[sid]) applyShapeGeometry(sWraps[j], tables[sid], 'seat-canvas');
+    }
+  }
+}
+window.addEventListener('resize', refreshAllShapeGeometry);
 
 /* ================================================================
    KEYBOARD: Escape exits placement / deselects / closes ctx menu
