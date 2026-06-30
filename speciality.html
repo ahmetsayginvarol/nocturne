@@ -40,11 +40,8 @@
       --avail:        rgba(15,35,70,0.72);
       --avail-border: rgba(80,140,220,0.9);
       --teal:         #2dd4bf;
-      /* #ef4444 — Nocturne's reserved/held border color, used in
-         .tm.soft-block-held and station-manager close buttons */
+      /* #ef4444 — Nocturne's reserved/held border color */
       --reserved:     #ef4444;
-      /* Dot diameter — single constant; tune here to fit floor plan density */
-      --dot-size:     18px;
     }
 
     html, body {
@@ -333,72 +330,171 @@
     }
     .sb-row.placed { color: var(--teal); }
     .sb-row.placed .sb-dot { background: var(--teal); }
+    .sb-row.sel { color: var(--gold); }
+    .sb-row.sel .sb-dot { background: var(--gold); }
 
-    /* ---- TABLE DOTS ---- */
-    /* Base structure — mirrors Nocturne .tm (index.html line 2080) */
-    .table-dot {
+    /* ---- SHAPE-BASED TABLE EDITOR ---- */
+    .tbl-wrap {
       position: absolute;
-      width: var(--dot-size);
-      height: var(--dot-size);
-      border-radius: 50%;
       transform: translate(-50%, -50%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 8px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-      cursor: grab;
       user-select: none;
       -webkit-user-select: none;
       touch-action: none;
       -webkit-tap-highlight-color: transparent;
-      transition: transform 0.12s, box-shadow 0.12s;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
-      /* Open/available: solid teal fill, dark text */
-      background: var(--teal);
-      border: 2px solid rgba(45,212,191,0.55);
-      color: var(--bg);
+      cursor: move;
+      z-index: 5;
     }
-    .table-dot:hover {
-      transform: translate(-50%, -50%) scale(1.45);
-      z-index: 15;
-      box-shadow: 0 0 10px rgba(45,212,191,0.55), 0 2px 8px rgba(0,0,0,0.5);
+    .tbl-wrap.selected { z-index: 15; }
+    .tbl-body {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(45,212,191,0.15);
+      border: 2px solid var(--teal);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
     }
-    .table-dot.dragging {
-      cursor: grabbing;
-      z-index: 50;
-      box-shadow: 0 0 14px rgba(45,212,191,0.7), 0 2px 8px rgba(0,0,0,0.5);
-    }
-    /* Occupied: teal-family placeholder — period coloring added with seating actions */
-    .table-dot.occupied {
-      background: var(--teal);
-      border-color: rgba(45,212,191,0.55);
-      color: var(--bg);
-    }
-    /* Reserved/held — diagonal stripe pattern from Nocturne .tm.soft-block-held
-       (index.html line 1788). Stripe: rgba(220,38,38,0.92) on rgba(12,28,62,0.95).
-       Border: #ef4444 (Nocturne's reserved border color, index.html line 1795). */
-    .table-dot.reserved {
-      background: repeating-linear-gradient(
-        45deg,
-        rgba(220,38,38,0.92) 0px,
-        rgba(220,38,38,0.92) 4px,
-        rgba(12,28,62,0.95)  4px,
-        rgba(12,28,62,0.95)  9px
-      );
-      border: 2px solid #ef4444;
-      color: #fff;
+    .tbl-body.circle, .tbl-body.oval { border-radius: 50%; }
+    .tbl-body.rectangle { border-radius: 4px; }
+    .tbl-label {
+      font-size: 10px;
       font-weight: 700;
+      color: var(--teal);
+      pointer-events: none;
+      letter-spacing: -0.5px;
     }
-    .table-dot.reserved:hover {
-      box-shadow: 0 0 10px rgba(239,68,68,0.55), 0 2px 8px rgba(0,0,0,0.5);
+    .tbl-wrap.selected .tbl-body {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 1px var(--gold), 0 4px 14px rgba(201,168,76,0.35);
     }
-    /* Seating page: no grab cursor */
-    .dot-static { cursor: default; }
-    .dot-static:hover {
-      transform: translate(-50%, -50%) scale(1.3);
+    .tbl-wrap.selected .tbl-label { color: var(--gold); }
+
+    /* Resize handles */
+    .tbl-handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: var(--bg);
+      border: 1.5px solid var(--gold);
+      border-radius: 2px;
+      z-index: 20;
+      touch-action: none;
     }
+    .tbl-h-nw { top: -5px; left: -5px; cursor: nw-resize; }
+    .tbl-h-n  { top: -5px; left: calc(50% - 5px); cursor: n-resize; }
+    .tbl-h-ne { top: -5px; right: -5px; cursor: ne-resize; }
+    .tbl-h-e  { top: calc(50% - 5px); right: -5px; cursor: e-resize; }
+    .tbl-h-se { bottom: -5px; right: -5px; cursor: se-resize; }
+    .tbl-h-s  { bottom: -5px; left: calc(50% - 5px); cursor: s-resize; }
+    .tbl-h-sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+    .tbl-h-w  { top: calc(50% - 5px); left: -5px; cursor: w-resize; }
+
+    /* Rotation handle — gold pill above center */
+    .tbl-rot-handle {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: var(--gold);
+      border-radius: 50%;
+      top: -34px;
+      left: calc(50% - 7px);
+      cursor: crosshair;
+      z-index: 20;
+      touch-action: none;
+    }
+    .tbl-rot-line {
+      position: absolute;
+      width: 1px;
+      height: 22px;
+      background: var(--gold);
+      top: 100%;
+      left: calc(50% - 1px);
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* Inline edit popover */
+    .tbl-popover {
+      position: absolute;
+      left: calc(100% + 14px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 14px 16px;
+      width: 190px;
+      z-index: 30;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+      cursor: default;
+    }
+    .pop-shape-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+    .pop-shape-btn {
+      flex: 1;
+      padding: 5px 2px;
+      border-radius: 4px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text-dim);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    .pop-shape-btn.sel {
+      border-color: var(--teal);
+      color: var(--teal);
+      background: rgba(45,212,191,0.08);
+    }
+    .pop-row { margin-bottom: 10px; }
+    .pop-row:last-child { margin-bottom: 0; }
+    .pop-label {
+      display: block;
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .pop-input {
+      width: 100%;
+      padding: 6px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .pop-input:focus { border-color: var(--teal); }
+    .pop-del-btn {
+      width: 100%;
+      padding: 7px;
+      border-radius: 4px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text-dim);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+      margin-top: 4px;
+    }
+    .pop-del-btn:hover { border-color: var(--reserved); color: var(--reserved); }
+
+    /* Seating page: occupied table tint */
+    .tbl-wrap.occupied .tbl-body {
+      background: rgba(230,57,70,0.15);
+      border-color: var(--s2);
+    }
+    .tbl-wrap.occupied .tbl-label { color: var(--s2); }
 
     /* ---- SEATING PAGE ---- */
     .seating-body {
@@ -441,68 +537,6 @@
       line-height: 1.8;
     }
 
-    /* ---- MODAL ---- */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(8, 12, 20, 0.72);
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity 0.2s ease, visibility 0s linear 0.2s;
-      z-index: 200;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .modal-overlay.open {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      transition: opacity 0.2s ease, visibility 0s linear 0s;
-    }
-    .modal-box {
-      background: var(--card);
-      border: 1px solid var(--border2);
-      border-radius: 12px;
-      padding: 28px;
-      width: 310px;
-      max-width: 92vw;
-    }
-    .modal-title {
-      font-family: 'Cinzel', serif;
-      font-size: 15px;
-      color: var(--gold);
-      margin-bottom: 22px;
-    }
-    .form-row { margin-bottom: 14px; }
-    .form-label {
-      display: block;
-      font-size: 10px;
-      color: var(--text-dim);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-    .form-input {
-      width: 100%;
-      padding: 8px 12px;
-      background: var(--bg);
-      border: 1px solid var(--border2);
-      border-radius: 6px;
-      color: var(--text);
-      font-family: 'DM Mono', monospace;
-      font-size: 14px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .form-input:focus { border-color: var(--teal); }
-    .modal-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 24px;
-      justify-content: flex-end;
-    }
 
     /* ---- TOAST ---- */
     .toast {
@@ -607,16 +641,17 @@
   <div class="cal-toolbar">
     <button class="btn" onclick="goTo('overview')">&larr; Back</button>
     <span id="cal-title" style="font-size:13px;color:var(--text-mid);">Calibration</span>
-    <span class="cal-hint">Drag dots to correct positions &mdash; click to edit pax</span>
+    <span class="cal-hint" id="cal-hint" style="display:none;">Click on floor plan to place table</span>
     <div class="hdr-spacer"></div>
     <span class="save-indicator saved" id="save-ind">All saved</span>
-    <button class="btn teal" onclick="goTo('overview')">Done Calibrating</button>
+    <button class="btn" id="btn-add-table" onclick="enterPlacementMode()">+ Add Table</button>
+    <button class="btn teal" onclick="finishCalibration()">Done</button>
   </div>
 
   <div class="cal-body">
-    <div class="cal-canvas-wrap" id="cal-canvas">
+    <div class="cal-canvas-wrap" id="cal-canvas" onclick="onCanvasClick(event)">
       <img class="bg-img" id="cal-bg" src="" alt="Floor plan" draggable="false">
-      <!-- dots injected by JS -->
+      <!-- shapes injected by JS -->
     </div>
     <div class="cal-sidebar">
       <div class="sidebar-head">Tables (<span id="sb-count">0</span>)</div>
@@ -653,27 +688,6 @@
   </div>
 </div>
 
-<!-- ================================================================
-     TABLE EDIT MODAL
-     ================================================================ -->
-<div class="modal-overlay" id="modal-tbl">
-  <div class="modal-box" role="dialog" aria-modal="true">
-    <div class="modal-title" id="modal-tbl-title">Table --</div>
-    <div class="form-row">
-      <label class="form-label" for="inp-max">Max Pax</label>
-      <input class="form-input" type="number" id="inp-max" min="1" max="30" value="2">
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="inp-min">Min Pax</label>
-      <input class="form-input" type="number" id="inp-min" min="1" max="30" value="1">
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal()">Cancel</button>
-      <button class="btn teal" onclick="saveModal()">Save</button>
-    </div>
-  </div>
-</div>
-
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -693,47 +707,14 @@ var RESTAURANT_CONFIG = {
     firebaseRoot: 'sabatinis',
     backgroundImageUrl: 'sab.jpg',
     deck: 8,
-    totalSeats: 104,
-    tables: {
-      '1': {maxPax:2},  '2': {maxPax:4},  '3': {maxPax:2},  '4': {maxPax:4},
-      '5': {maxPax:4},  '6': {maxPax:4},  '7': {maxPax:6},  '8': {maxPax:6},
-      '9': {maxPax:2},  '10':{maxPax:2},  '11':{maxPax:2},  '12':{maxPax:2},
-      '13':{maxPax:2},  '14':{maxPax:4},  '15':{maxPax:4},  '16':{maxPax:4},
-      '17':{maxPax:6},  '18':{maxPax:4},  '19':{maxPax:4},  '20':{maxPax:2},
-      '21':{maxPax:2},  '22':{maxPax:2},  '23':{maxPax:2},  '24':{maxPax:6},
-      '25':{maxPax:6},  '26':{maxPax:2},  '27':{maxPax:2},  '28':{maxPax:2},
-      '29':{maxPax:6},  '30':{maxPax:6},  '31':{maxPax:6}
-    }
+    totalSeats: 104
   },
   crownGrill: {
     displayName: 'Crown Grill',
     firebaseRoot: 'crownGrill',
     backgroundImageUrl: 'cg.jpg',
     deck: 7,
-    totalSeats: 180,
-    /* Tables 13, 17, 57 intentionally absent — not on floor plan */
-    tables: {
-      '1': {maxPax:4},  '2': {maxPax:2},  '3': {maxPax:2},  '4': {maxPax:2},
-      '5': {maxPax:2},  '6': {maxPax:2},  '7': {maxPax:2},  '8': {maxPax:2},
-      '9': {maxPax:2},  '10':{maxPax:2},  '11':{maxPax:2},  '12':{maxPax:2},
-      '14':{maxPax:4},  '15':{maxPax:2},  '16':{maxPax:4},  '18':{maxPax:2},
-      '19':{maxPax:2},  '20':{maxPax:2},  '21':{maxPax:2},  '22':{maxPax:2},
-      '23':{maxPax:2},  '24':{maxPax:4},  '25':{maxPax:2},  '26':{maxPax:4},
-      '27':{maxPax:2},  '28':{maxPax:4},  '29':{maxPax:2},  '30':{maxPax:2},
-      '31':{maxPax:2},  '32':{maxPax:2},  '33':{maxPax:2},  '34':{maxPax:2},
-      '35':{maxPax:2},  '36':{maxPax:2},  '37':{maxPax:2},  '38':{maxPax:2},
-      '39':{maxPax:2},  '40':{maxPax:4},  '41':{maxPax:2},  '42':{maxPax:2},
-      '43':{maxPax:2},  '44':{maxPax:2},  '45':{maxPax:2},  '46':{maxPax:2},
-      '47':{maxPax:2},  '48':{maxPax:2},  '49':{maxPax:2},  '50':{maxPax:2},
-      '51':{maxPax:2},  '52':{maxPax:2},  '53':{maxPax:2},  '54':{maxPax:2},
-      '55':{maxPax:2},  '56':{maxPax:2},  '58':{maxPax:2},  '59':{maxPax:2},
-      '60':{maxPax:2},  '61':{maxPax:2},  '62':{maxPax:2},  '63':{maxPax:2},
-      '64':{maxPax:2},  '65':{maxPax:2},  '66':{maxPax:2},  '67':{maxPax:2},
-      '68':{maxPax:2},  '69':{maxPax:4},  '70':{maxPax:4},  '71':{maxPax:4},
-      '72':{maxPax:2},  '73':{maxPax:2},  '74':{maxPax:2},  '75':{maxPax:2},
-      '76':{maxPax:2},  '77':{maxPax:2},  '78':{maxPax:2},  '79':{maxPax:2},
-      '80':{maxPax:4},  '81':{maxPax:4}
-    }
+    totalSeats: 180
   }
 };
 
@@ -761,17 +742,15 @@ var db          = null;  /* set inside window.load once async SDK is ready */
 var seatListener    = null;
 var seatListenerRef = null;
 
-/* Drag state */
-var drag = {
-  on:     false,
-  id:     null,
-  startCX: 0, startCY: 0,
-  startX:  0, startY:  0,
-  moved:  false
+/* Editor state — calibration shape tool */
+var editor = {
+  mode:       'idle',   /* 'idle' | 'placing' | 'editing' */
+  selectedId: null,
+  action:     null,     /* null | 'move' | 'resize-nw' | ... | 'rotate' */
+  ptStartX: 0, ptStartY: 0,
+  snapX: 0, snapY: 0, snapW: 0, snapH: 0, snapRot: 0,
+  snapCX: 0, snapCY: 0   /* canvas-px center at drag start (for rotate) */
 };
-
-/* Modal state */
-var modalId = null;
 
 /* Toast timer */
 var toastTimer = null;
@@ -783,23 +762,6 @@ function cfg() { return RESTAURANT_CONFIG[currentRest]; }
 function tblsRef() { return db ? db.ref(cfg().firebaseRoot + '/tables') : null; }
 
 function numSort(a, b) { return parseInt(a, 10) - parseInt(b, 10); }
-
-function gridPositions(ids) {
-  var n    = ids.length;
-  var cols = Math.ceil(Math.sqrt(n * 1.6));
-  if (cols < 1) cols = 1;
-  var rows = Math.ceil(n / cols);
-  if (rows < 1) rows = 1;
-  var pos = {};
-  ids.forEach(function(id, i) {
-    var col = i % cols;
-    var row = Math.floor(i / cols);
-    var xf  = cols > 1 ? col / (cols - 1) : 0.5;
-    var yf  = rows > 1 ? row / (rows - 1) : 0.5;
-    pos[id] = { x: 5 + xf * 90, y: 5 + yf * 90 };
-  });
-  return pos;
-}
 
 function showToast(msg, kind) {
   clearTimeout(toastTimer);
@@ -824,7 +786,8 @@ function setSave(state) {
    PAGE NAVIGATION
    ================================================================ */
 function goTo(page) {
-  if (activePage === 'seating') detachSeatListener();
+  if (activePage === 'seating')     detachSeatListener();
+  if (activePage === 'calibration') { exitPlacementMode(); deselectTable(false); }
 
   ['overview', 'calibration', 'seating'].forEach(function(p) {
     var el = document.getElementById('page-' + p);
@@ -876,261 +839,476 @@ function initCalibration() {
   document.getElementById('cal-title').textContent = c.displayName + ' — Calibration';
   document.getElementById('cal-bg').src = c.backgroundImageUrl;
   setSave('saved');
-
-  var seedIds = Object.keys(c.tables).sort(numSort);
-  var gridPos = gridPositions(seedIds);
+  deselectTable(false);
+  exitPlacementMode();
 
   var ref = tblsRef();
   if (!ref) {
-    /* Firebase unavailable — seed from config, show locally */
-    seedIds.forEach(function(id) {
-      tables[id] = makeTableRecord(id, gridPos[id].x, gridPos[id].y, c.tables[id].maxPax);
-    });
-    renderCalDots();
-    renderSidebar();
-    setSave('saved');
+    tables = {};
+    renderAllShapes();
     return;
   }
 
   ref.once('value').then(function(snap) {
-    var existing = snap.val();
     tables = {};
-
-    if (existing) {
-      Object.keys(existing).forEach(function(id) {
-        tables[id] = existing[id];
-      });
-      /* Ensure any new seed tables are added without overwriting placed ones */
-      var updates = {};
-      seedIds.forEach(function(id) {
-        if (!tables[id]) {
-          tables[id] = makeTableRecord(id, gridPos[id].x, gridPos[id].y, c.tables[id].maxPax);
-          updates[id] = tables[id];
-        }
-      });
-      if (Object.keys(updates).length > 0) {
-        tblsRef().update(updates).catch(function() {});
-      }
-    } else {
-      /* First-time seed */
-      seedIds.forEach(function(id) {
-        tables[id] = makeTableRecord(id, gridPos[id].x, gridPos[id].y, c.tables[id].maxPax);
-      });
-      tblsRef().set(tables).catch(function() {});
+    var data = snap.val();
+    if (data) {
+      Object.keys(data).forEach(function(id) { tables[id] = data[id]; });
     }
-
-    renderCalDots();
-    renderSidebar();
+    renderAllShapes();
   }).catch(function() {
     showToast('Could not load table data', 'err');
   });
 }
 
-function makeTableRecord(id, x, y, maxPax) {
-  return {
-    id:  id,
-    x:   x,
-    y:   y,
-    maxPax: maxPax,
-    minPax: 1,
-    occupyingReservationIds: []
-    /* station field intentionally absent — add later without migration */
-  };
+function finishCalibration() {
+  deselectTable(true);
+  goTo('overview');
 }
 
-function renderCalDots() {
+/* ================================================================
+   PLACEMENT MODE
+   ================================================================ */
+function enterPlacementMode() {
+  deselectTable(true);
+  editor.mode = 'placing';
+  document.getElementById('cal-canvas').style.cursor = 'crosshair';
+  document.getElementById('cal-hint').style.display = 'inline';
+  document.getElementById('btn-add-table').className = 'btn teal';
+}
+
+function exitPlacementMode() {
+  if (editor.mode === 'placing') editor.mode = 'idle';
+  document.getElementById('cal-canvas').style.cursor = '';
+  var hint = document.getElementById('cal-hint');
+  if (hint) hint.style.display = 'none';
+  var btn = document.getElementById('btn-add-table');
+  if (btn) btn.className = 'btn';
+}
+
+function onCanvasClick(e) {
   var canvas = document.getElementById('cal-canvas');
-  /* Remove old dots */
-  var old = canvas.querySelectorAll('.table-dot');
-  for (var i = 0; i < old.length; i++) { canvas.removeChild(old[i]); }
+  var bg     = document.getElementById('cal-bg');
+  if (e.target !== canvas && e.target !== bg) return;
+  if (editor.mode === 'placing') {
+    var rect = canvas.getBoundingClientRect();
+    var xPct = (e.clientX - rect.left) / rect.width  * 100;
+    var yPct = (e.clientY - rect.top)  / rect.height * 100;
+    placeNewTable(xPct, yPct);
+    exitPlacementMode();
+  } else if (editor.mode === 'editing') {
+    deselectTable(true);
+  }
+}
 
-  Object.keys(tables).sort(numSort).forEach(function(id) {
-    var t   = tables[id];
-    var dot = makeDot(id, t.x, t.y, false);
+/* ================================================================
+   TABLE CREATE / DELETE / SAVE
+   ================================================================ */
+function nextTableNumber() {
+  var nums = Object.keys(tables).map(function(id) {
+    return parseInt(id, 10);
+  }).filter(function(n) { return !isNaN(n); });
+  if (nums.length === 0) return 1;
+  nums.sort(function(a,b) { return a - b; });
+  for (var i = 1; i <= nums[nums.length-1] + 1; i++) {
+    if (nums.indexOf(i) === -1) return i;
+  }
+  return nums[nums.length-1] + 1;
+}
 
-    /* Mouse drag */
-    dot.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      startDrag(e.clientX, e.clientY, id);
-    });
-    /* Touch drag */
-    dot.addEventListener('touchstart', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var t0 = e.touches[0];
-      startDrag(t0.clientX, t0.clientY, id);
-    }, {passive: false});
+function placeNewTable(xPct, yPct) {
+  var num = nextTableNumber();
+  var id  = String(num);
+  tables[id] = {
+    id: id,
+    number: num,
+    maxPax: 2,
+    minPax: 1,
+    shape: 'circle',
+    x: xPct,
+    y: yPct,
+    width: 6,
+    height: 6,
+    rotation: 0,
+    occupyingReservationIds: []
+  };
+  var el = buildShapeEl(id);
+  document.getElementById('cal-canvas').appendChild(el);
+  renderCalSidebar();
+  selectTable(id);
+}
 
-    canvas.appendChild(dot);
+function deleteTable(id) {
+  var num = tables[id] ? tables[id].number : id;
+  if (!confirm('Delete Table ' + num + '? This cannot be undone.')) return;
+  var el = document.getElementById('tbl-' + id);
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  delete tables[id];
+  editor.selectedId = null;
+  editor.mode = 'idle';
+  renderCalSidebar();
+  var ref = tblsRef();
+  if (ref) {
+    setSave('saving');
+    ref.child(id).remove().then(function() {
+      setSave('saved');
+    }).catch(function() { setSave('err'); });
+  }
+}
+
+function saveTable(id) {
+  var t = tables[id];
+  if (!t) return;
+  var ref = tblsRef();
+  if (!ref) return;
+  setSave('saving');
+  ref.child(id).set(t).then(function() {
+    setSave('saved');
+  }).catch(function() {
+    setSave('err');
+    showToast('Save failed', 'err');
   });
 }
 
-function makeDot(id, xPct, yPct, occupied) {
-  var dot = document.createElement('div');
-  dot.className = 'table-dot' + (occupied ? ' occupied' : '');
-  dot.id = 'dot-' + id;
-  dot.textContent = id;
-  dot.style.left = xPct + '%';
-  dot.style.top  = yPct + '%';
-  return dot;
+/* ================================================================
+   SHAPE RENDERING
+   ================================================================ */
+function renderAllShapes() {
+  var canvas = document.getElementById('cal-canvas');
+  var old = canvas.querySelectorAll('.tbl-wrap');
+  for (var i = 0; i < old.length; i++) { canvas.removeChild(old[i]); }
+  Object.keys(tables).sort(numSort).forEach(function(id) {
+    canvas.appendChild(buildShapeEl(id));
+  });
+  renderCalSidebar();
 }
 
-function renderSidebar() {
+function buildShapeEl(id) {
+  var t    = tables[id];
+  var wrap = document.createElement('div');
+  wrap.className = 'tbl-wrap';
+  wrap.id = 'tbl-' + id;
+  applyShapeGeometry(wrap, t);
+
+  var body = document.createElement('div');
+  body.className = 'tbl-body ' + (t.shape || 'circle');
+
+  var lbl = document.createElement('span');
+  lbl.className = 'tbl-label';
+  lbl.textContent = String(t.number || id);
+
+  body.appendChild(lbl);
+  wrap.appendChild(body);
+
+  wrap.addEventListener('mousedown', function(e) {
+    onShapePointerDown(e, id, 'move');
+  });
+  wrap.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    onShapeTouchDown(e, id, 'move');
+  }, {passive: false});
+
+  return wrap;
+}
+
+function applyShapeGeometry(wrap, t) {
+  wrap.style.left      = t.x + '%';
+  wrap.style.top       = t.y + '%';
+  wrap.style.width     = t.width + '%';
+  wrap.style.height    = t.height + '%';
+  wrap.style.transform = 'translate(-50%,-50%) rotate(' + (t.rotation || 0) + 'deg)';
+}
+
+function refreshShapeEl(id) {
+  var t    = tables[id];
+  var wrap = document.getElementById('tbl-' + id);
+  if (!wrap || !t) return;
+  applyShapeGeometry(wrap, t);
+  var body = wrap.querySelector('.tbl-body');
+  if (body) body.className = 'tbl-body ' + (t.shape || 'circle');
+  var lbl  = wrap.querySelector('.tbl-label');
+  if (lbl)  lbl.textContent = String(t.number || id);
+}
+
+/* ================================================================
+   SELECTION & HANDLES
+   ================================================================ */
+function selectTable(id) {
+  if (editor.selectedId && editor.selectedId !== id) deselectTable(true);
+  editor.selectedId = id;
+  editor.mode = 'editing';
+  var wrap = document.getElementById('tbl-' + id);
+  if (!wrap) return;
+  wrap.classList.add('selected');
+  attachHandles(wrap, id);
+  attachPopover(wrap, id);
+  renderCalSidebar();
+}
+
+function deselectTable(doSave) {
+  var id = editor.selectedId;
+  if (id) {
+    var wrap = document.getElementById('tbl-' + id);
+    if (wrap) {
+      wrap.classList.remove('selected');
+      detachHandles(wrap);
+      detachPopover(wrap);
+    }
+    if (doSave) saveTable(id);
+  }
+  editor.selectedId = null;
+  editor.mode = 'idle';
+  renderCalSidebar();
+}
+
+function attachHandles(wrap, id) {
+  detachHandles(wrap);
+  var t = tables[id];
+  var shape = t ? (t.shape || 'circle') : 'circle';
+
+  var dirs = shape === 'circle' ? ['n','e','s','w'] : ['nw','n','ne','e','se','s','sw','w'];
+  dirs.forEach(function(dir) {
+    var h = document.createElement('div');
+    h.className = 'tbl-handle tbl-h-' + dir;
+    h.addEventListener('mousedown', function(e) {
+      e.stopPropagation();
+      onShapePointerDown(e, id, 'resize-' + dir);
+    });
+    h.addEventListener('touchstart', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      onShapeTouchDown(e, id, 'resize-' + dir);
+    }, {passive: false});
+    wrap.appendChild(h);
+  });
+
+  var rot = document.createElement('div');
+  rot.className = 'tbl-rot-handle';
+  rot.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    onShapePointerDown(e, id, 'rotate');
+  });
+  rot.addEventListener('touchstart', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    onShapeTouchDown(e, id, 'rotate');
+  }, {passive: false});
+
+  var line = document.createElement('div');
+  line.className = 'tbl-rot-line';
+  rot.appendChild(line);
+  wrap.appendChild(rot);
+}
+
+function detachHandles(wrap) {
+  var els = wrap.querySelectorAll('.tbl-handle, .tbl-rot-handle');
+  for (var i = 0; i < els.length; i++) { wrap.removeChild(els[i]); }
+}
+
+/* ================================================================
+   INLINE POPOVER
+   ================================================================ */
+function attachPopover(wrap, id) {
+  detachPopover(wrap);
+  var t = tables[id];
+  if (!t) return;
+
+  var pop = document.createElement('div');
+  pop.className = 'tbl-popover';
+
+  /* Shape selector */
+  var shapeRow = document.createElement('div');
+  shapeRow.className = 'pop-shape-row';
+  ['circle','rectangle','oval'].forEach(function(s) {
+    var btn = document.createElement('button');
+    btn.className = 'pop-shape-btn' + (t.shape === s ? ' sel' : '');
+    btn.textContent = s === 'rectangle' ? 'rect' : s;
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      tables[id].shape = s;
+      refreshShapeEl(id);
+      var w = document.getElementById('tbl-' + id);
+      if (w) { detachHandles(w); attachHandles(w, id); detachPopover(w); attachPopover(w, id); }
+    });
+    shapeRow.appendChild(btn);
+  });
+  pop.appendChild(shapeRow);
+
+  pop.appendChild(makePopRow('Table #', t.number || id, function(v) {
+    var n = parseInt(v, 10);
+    if (!isNaN(n) && n > 0) {
+      tables[id].number = n;
+      var lbl = document.querySelector('#tbl-' + id + ' .tbl-label');
+      if (lbl) lbl.textContent = String(n);
+    }
+  }));
+  pop.appendChild(makePopRow('Max Pax', t.maxPax || 2, function(v) {
+    var n = parseInt(v, 10);
+    if (!isNaN(n) && n > 0) tables[id].maxPax = n;
+  }));
+  pop.appendChild(makePopRow('Min Pax', t.minPax || 1, function(v) {
+    var n = parseInt(v, 10);
+    if (!isNaN(n) && n > 0) tables[id].minPax = n;
+  }));
+
+  var delBtn = document.createElement('button');
+  delBtn.className = 'pop-del-btn';
+  delBtn.textContent = 'Delete Table';
+  delBtn.addEventListener('click', function(e) { e.stopPropagation(); deleteTable(id); });
+  pop.appendChild(delBtn);
+
+  pop.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+  pop.addEventListener('click',     function(e) { e.stopPropagation(); });
+  pop.addEventListener('touchstart',function(e) { e.stopPropagation(); }, {passive: true});
+
+  wrap.appendChild(pop);
+}
+
+function makePopRow(labelText, value, onchange) {
+  var row = document.createElement('div');
+  row.className = 'pop-row';
+  var lbl = document.createElement('label');
+  lbl.className = 'pop-label';
+  lbl.textContent = labelText;
+  var inp = document.createElement('input');
+  inp.className = 'pop-input';
+  inp.type  = 'number';
+  inp.value = value;
+  inp.addEventListener('change', function() { onchange(this.value); });
+  inp.addEventListener('mousedown',  function(e) { e.stopPropagation(); });
+  inp.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive: true});
+  row.appendChild(lbl);
+  row.appendChild(inp);
+  return row;
+}
+
+function detachPopover(wrap) {
+  var existing = wrap.querySelector('.tbl-popover');
+  if (existing) wrap.removeChild(existing);
+}
+
+/* ================================================================
+   DRAG / RESIZE / ROTATE
+   ================================================================ */
+function onShapePointerDown(e, id, action) {
+  if (e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  if (editor.mode !== 'editing' || editor.selectedId !== id) {
+    selectTable(id);
+    if (action !== 'move') return;
+  }
+  startEditorDrag(e.clientX, e.clientY, id, action);
+}
+
+function onShapeTouchDown(e, id, action) {
+  e.stopPropagation();
+  if (editor.mode !== 'editing' || editor.selectedId !== id) {
+    selectTable(id);
+    if (action !== 'move') return;
+  }
+  startEditorDrag(e.touches[0].clientX, e.touches[0].clientY, id, action);
+}
+
+function startEditorDrag(cx, cy, id, action) {
+  var t = tables[id];
+  if (!t) return;
+  editor.action   = action;
+  editor.ptStartX = cx;
+  editor.ptStartY = cy;
+  editor.snapX    = t.x;
+  editor.snapY    = t.y;
+  editor.snapW    = t.width;
+  editor.snapH    = t.height;
+  editor.snapRot  = t.rotation || 0;
+  var rect = document.getElementById('cal-canvas').getBoundingClientRect();
+  editor.snapCX = rect.left + t.x / 100 * rect.width;
+  editor.snapCY = rect.top  + t.y / 100 * rect.height;
+  document.addEventListener('mousemove', onEditorMove);
+  document.addEventListener('mouseup',   onEditorUp);
+  document.addEventListener('touchmove', onEditorTouchMove, {passive: false});
+  document.addEventListener('touchend',  onEditorTouchUp);
+}
+
+function onEditorMove(e)       { applyEditorDrag(e.clientX, e.clientY); }
+function onEditorTouchMove(e)  { e.preventDefault(); applyEditorDrag(e.touches[0].clientX, e.touches[0].clientY); }
+function onEditorUp()          { endEditorDrag(); }
+function onEditorTouchUp()     { endEditorDrag(); }
+
+function applyEditorDrag(cx, cy) {
+  var id = editor.selectedId;
+  if (!id || !editor.action) return;
+  var t = tables[id];
+  if (!t) return;
+  var rect = document.getElementById('cal-canvas').getBoundingClientRect();
+  var dxPct = (cx - editor.ptStartX) / rect.width  * 100;
+  var dyPct = (cy - editor.ptStartY) / rect.height * 100;
+  var act   = editor.action;
+
+  if (act === 'move') {
+    t.x = Math.max(0, Math.min(100, editor.snapX + dxPct));
+    t.y = Math.max(0, Math.min(100, editor.snapY + dyPct));
+
+  } else if (act === 'rotate') {
+    var a0 = Math.atan2(editor.ptStartY - editor.snapCY, editor.ptStartX - editor.snapCX);
+    var a1 = Math.atan2(cy - editor.snapCY, cx - editor.snapCX);
+    t.rotation = editor.snapRot + (a1 - a0) * 180 / Math.PI;
+
+  } else if (act === 'resize-se') {
+    t.width  = Math.max(2, editor.snapW + dxPct);
+    t.height = Math.max(2, editor.snapH + dyPct);
+  } else if (act === 'resize-sw') {
+    t.width  = Math.max(2, editor.snapW - dxPct);
+    t.height = Math.max(2, editor.snapH + dyPct);
+    t.x = editor.snapX + dxPct / 2;
+  } else if (act === 'resize-ne') {
+    t.width  = Math.max(2, editor.snapW + dxPct);
+    t.height = Math.max(2, editor.snapH - dyPct);
+    t.y = editor.snapY + dyPct / 2;
+  } else if (act === 'resize-nw') {
+    t.width  = Math.max(2, editor.snapW - dxPct);
+    t.height = Math.max(2, editor.snapH - dyPct);
+    t.x = editor.snapX + dxPct / 2;
+    t.y = editor.snapY + dyPct / 2;
+  } else if (act === 'resize-e') {
+    t.width = Math.max(2, editor.snapW + dxPct);
+  } else if (act === 'resize-w') {
+    t.width = Math.max(2, editor.snapW - dxPct);
+    t.x = editor.snapX + dxPct / 2;
+  } else if (act === 'resize-s') {
+    t.height = Math.max(2, editor.snapH + dyPct);
+  } else if (act === 'resize-n') {
+    t.height = Math.max(2, editor.snapH - dyPct);
+    t.y = editor.snapY + dyPct / 2;
+  }
+
+  refreshShapeEl(id);
+}
+
+function endEditorDrag() {
+  editor.action = null;
+  document.removeEventListener('mousemove', onEditorMove);
+  document.removeEventListener('mouseup',   onEditorUp);
+  document.removeEventListener('touchmove', onEditorTouchMove);
+  document.removeEventListener('touchend',  onEditorTouchUp);
+}
+
+/* ================================================================
+   CALIBRATION SIDEBAR
+   ================================================================ */
+function renderCalSidebar() {
   var list = document.getElementById('sb-list');
   list.innerHTML = '';
   var ids = Object.keys(tables).sort(numSort);
   document.getElementById('sb-count').textContent = ids.length;
-
   ids.forEach(function(id) {
     var t   = tables[id];
+    var sel = editor.selectedId === id;
     var row = document.createElement('div');
-    row.className = 'sb-row placed';
-    row.innerHTML = '<div class="sb-dot"></div>T' + id + ' &mdash; ' + t.maxPax + ' pax';
-    row.addEventListener('click', function() { openModal(id); });
+    row.className = 'sb-row placed' + (sel ? ' sel' : '');
+    row.innerHTML = '<div class="sb-dot"></div>T' + (t.number || id) + ' &mdash; ' + (t.maxPax || 2) + ' pax';
+    row.addEventListener('click', function() { selectTable(id); });
     list.appendChild(row);
   });
 }
 
-/* ================================================================
-   DRAG LOGIC (calibration only)
-   ================================================================ */
-function startDrag(cx, cy, id) {
-  drag.on     = true;
-  drag.id     = id;
-  drag.startCX = cx;
-  drag.startCY = cy;
-  drag.startX  = tables[id] ? tables[id].x : 50;
-  drag.startY  = tables[id] ? tables[id].y : 50;
-  drag.moved  = false;
-
-  var dot = document.getElementById('dot-' + id);
-  if (dot) dot.classList.add('dragging');
-
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup',   onUp);
-  document.addEventListener('touchmove', onTouchMove, {passive: false});
-  document.addEventListener('touchend',  onTouchUp);
-}
-
-function onMove(e)      { if (drag.on) moveDrag(e.clientX, e.clientY); }
-function onTouchMove(e) {
-  if (!drag.on) return;
-  e.preventDefault();
-  moveDrag(e.touches[0].clientX, e.touches[0].clientY);
-}
-function onUp(e)      { if (drag.on) endDrag(); }
-function onTouchUp(e) { if (drag.on) endDrag(); }
-
-function moveDrag(cx, cy) {
-  var rect = document.getElementById('cal-canvas').getBoundingClientRect();
-  var dx   = cx - drag.startCX;
-  var dy   = cy - drag.startCY;
-
-  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
-
-  var nx = drag.startX + (dx / rect.width)  * 100;
-  var ny = drag.startY + (dy / rect.height) * 100;
-  nx = Math.max(1, Math.min(99, nx));
-  ny = Math.max(1, Math.min(99, ny));
-
-  var dot = document.getElementById('dot-' + drag.id);
-  if (dot) { dot.style.left = nx + '%'; dot.style.top = ny + '%'; }
-
-  if (tables[drag.id]) { tables[drag.id].x = nx; tables[drag.id].y = ny; }
-}
-
-function endDrag() {
-  var id    = drag.id;
-  var moved = drag.moved;
-
-  drag.on = false;
-  drag.id = null;
-
-  var dot = document.getElementById('dot-' + id);
-  if (dot) dot.classList.remove('dragging');
-
-  document.removeEventListener('mousemove', onMove);
-  document.removeEventListener('mouseup',   onUp);
-  document.removeEventListener('touchmove', onTouchMove);
-  document.removeEventListener('touchend',  onTouchUp);
-
-  if (moved) {
-    savePosition(id);
-  } else {
-    openModal(id);
-  }
-}
-
-function savePosition(id) {
-  var t = tables[id];
-  if (!t) return;
-  var ref = tblsRef();
-  if (!ref) { setSave('saved'); return; }
-  setSave('saving');
-  ref.child(id).update({ x: t.x, y: t.y }).then(function() {
-    setSave('saved');
-  }).catch(function() {
-    setSave('err');
-    showToast('Position save failed', 'err');
-  });
-}
-
-/* ================================================================
-   TABLE EDIT MODAL
-   ================================================================ */
-function openModal(id) {
-  modalId = id;
-  var t = tables[id];
-  document.getElementById('modal-tbl-title').textContent = 'Table ' + id;
-  document.getElementById('inp-max').value = t ? t.maxPax : 2;
-  document.getElementById('inp-min').value = t ? (t.minPax || 1) : 1;
-  document.getElementById('modal-tbl').className = 'modal-overlay open';
-}
-
-function closeModal() {
-  document.getElementById('modal-tbl').className = 'modal-overlay';
-  modalId = null;
-}
-
-function saveModal() {
-  if (!modalId) return;
-  var maxP = parseInt(document.getElementById('inp-max').value, 10);
-  var minP = parseInt(document.getElementById('inp-min').value, 10);
-
-  if (isNaN(maxP) || maxP < 1)  { showToast('Invalid max pax', 'err'); return; }
-  if (isNaN(minP) || minP < 1)  { showToast('Invalid min pax', 'err'); return; }
-  if (minP > maxP)               { showToast('Min pax cannot exceed max pax', 'err'); return; }
-
-  if (tables[modalId]) {
-    tables[modalId].maxPax = maxP;
-    tables[modalId].minPax = minP;
-  }
-
-  var id  = modalId;
-  var ref = tblsRef();
-  if (!ref) {
-    showToast('Table ' + id + ' saved (local only)', 'ok');
-    renderSidebar();
-  } else {
-    setSave('saving');
-    ref.child(id).update({ maxPax: maxP, minPax: minP }).then(function() {
-      setSave('saved');
-      showToast('Table ' + id + ' saved', 'ok');
-      renderSidebar();
-    }).catch(function() {
-      setSave('err');
-      showToast('Save failed', 'err');
-    });
-  }
-
-  closeModal();
-}
-
-/* Close modal on overlay backdrop click */
-document.getElementById('modal-tbl').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
-});
 
 /* ================================================================
    SEATING PAGE
@@ -1143,8 +1321,7 @@ function initSeating() {
   detachSeatListener();
   var ref = tblsRef();
   if (!ref) {
-    /* No Firebase — show whatever tables are in local memory */
-    renderSeatDots();
+    renderSeatShapes();
     return;
   }
   seatListenerRef = ref;
@@ -1154,7 +1331,7 @@ function initSeating() {
     if (data) {
       Object.keys(data).forEach(function(id) { tables[id] = data[id]; });
     }
-    renderSeatDots();
+    renderSeatShapes();
   });
 }
 
@@ -1166,25 +1343,44 @@ function detachSeatListener() {
   }
 }
 
-function renderSeatDots() {
+function renderSeatShapes() {
   var canvas = document.getElementById('seat-canvas');
-  var old = canvas.querySelectorAll('.table-dot');
+  var old = canvas.querySelectorAll('.tbl-wrap');
   for (var i = 0; i < old.length; i++) { canvas.removeChild(old[i]); }
 
   Object.keys(tables).sort(numSort).forEach(function(id) {
-    var t = tables[id];
+    var t   = tables[id];
     var occ = t.occupyingReservationIds && t.occupyingReservationIds.length > 0;
-    var dot = makeDot(id, t.x, t.y, occ);
-    dot.classList.add('dot-static');
-    canvas.appendChild(dot);
+    var wrap = document.createElement('div');
+    wrap.className = 'tbl-wrap' + (occ ? ' occupied' : '');
+    wrap.id = 'seat-tbl-' + id;
+    wrap.style.left      = t.x + '%';
+    wrap.style.top       = t.y + '%';
+    wrap.style.width     = t.width + '%';
+    wrap.style.height    = t.height + '%';
+    wrap.style.transform = 'translate(-50%,-50%) rotate(' + (t.rotation || 0) + 'deg)';
+    wrap.style.cursor    = 'default';
+    var body = document.createElement('div');
+    body.className = 'tbl-body ' + (t.shape || 'circle');
+    var lbl = document.createElement('span');
+    lbl.className = 'tbl-label';
+    lbl.textContent = String(t.number || id);
+    body.appendChild(lbl);
+    wrap.appendChild(body);
+    canvas.appendChild(wrap);
   });
 }
 
 /* ================================================================
-   KEYBOARD: Escape closes modal
+   KEYBOARD: Escape exits placement / deselects
    ================================================================ */
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' || e.keyCode === 27) closeModal();
+  if (e.key !== 'Escape' && e.keyCode !== 27) return;
+  if (editor.mode === 'placing') {
+    exitPlacementMode();
+  } else if (editor.mode === 'editing') {
+    deselectTable(true);
+  }
 });
 
 /* ================================================================
