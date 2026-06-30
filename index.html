@@ -13295,20 +13295,33 @@ function _clearCanvas() {
   if (_canvasCtx) _canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-// Convert screen event coords → canvas pixel coords
+// Convert screen event coords → canvas pixel coords.
+// The canvas lives inside the rotated #map-container and is sized to the
+// UNROTATED map, so its pixel space matches stored table coordinates. We must
+// invert the map rotation when mapping the finger's screen position into that
+// space — otherwise the slice/lasso lands on the wrong part of the map.
 function _evtPx(e, canvas) {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width  / rect.width;
-  const scaleY = canvas.height / rect.height;
   const cx = (e.touches ? e.touches[0].clientX : e.clientX);
   const cy = (e.touches ? e.touches[0].clientY : e.clientY);
+  // Fraction within the on-screen (possibly rotated) bounding box
+  const fx = (cx - rect.left) / rect.width;
+  const fy = (cy - rect.top)  / rect.height;
+  // Invert the map rotation to land in the canvas's own (unrotated) space —
+  // same mapping used by the marker-drag coordinate conversion.
+  const rot = ((state.mapRotation || 0) % 360 + 360) % 360;
+  let mx, my;
+  if (rot === 90)       { mx = fy;     my = 1 - fx; }
+  else if (rot === 180) { mx = 1 - fx; my = 1 - fy; }
+  else if (rot === 270) { mx = 1 - fy; my = fx;     }
+  else                  { mx = fx;     my = fy;     }
   return {
-    x: (cx - rect.left) * scaleX,
-    y: (cy - rect.top)  * scaleY,
-    // also store as % for polygon test
+    x: mx * canvas.width,
+    y: my * canvas.height,
+    // also store as % for polygon / line hit tests against table positions
     pct: {
-      x: Math.max(0, Math.min(100, ((cx - rect.left) / rect.width)  * 100)),
-      y: Math.max(0, Math.min(100, ((cy - rect.top)  / rect.height) * 100)),
+      x: Math.max(0, Math.min(100, mx * 100)),
+      y: Math.max(0, Math.min(100, my * 100)),
     }
   };
 }
