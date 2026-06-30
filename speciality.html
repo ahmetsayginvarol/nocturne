@@ -489,6 +489,39 @@
     }
     .pop-del-btn:hover { border-color: var(--reserved); color: var(--reserved); }
 
+    /* ---- CONTEXT MENU ---- */
+    .ctx-menu {
+      position: fixed;
+      background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 4px 0;
+      min-width: 182px;
+      z-index: 500;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.65);
+    }
+    .ctx-head {
+      padding: 6px 14px 5px;
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 3px;
+    }
+    .ctx-item {
+      padding: 8px 16px;
+      font-size: 12px;
+      color: var(--text-mid);
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+      white-space: nowrap;
+    }
+    .ctx-item:hover { background: var(--border); color: var(--text); }
+    .ctx-danger { color: var(--reserved); }
+    .ctx-danger:hover { background: rgba(239,68,68,0.08); color: var(--reserved); }
+    .ctx-sep { height: 1px; background: var(--border); margin: 3px 0; }
+
     /* Seating page: occupied table */
     .tbl-wrap.occupied .tbl-body {
       background: var(--s2);
@@ -650,7 +683,7 @@
   </div>
 
   <div class="cal-body">
-    <div class="cal-canvas-wrap" id="cal-canvas" onclick="onCanvasClick(event)">
+    <div class="cal-canvas-wrap" id="cal-canvas" onclick="onCanvasClick(event)" oncontextmenu="return false">
       <img class="bg-img" id="cal-bg" src="" alt="Floor plan" draggable="false">
       <!-- shapes injected by JS -->
     </div>
@@ -687,6 +720,21 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- CALIBRATION CONTEXT MENU -->
+<div id="cal-ctx-menu" class="ctx-menu" style="display:none;">
+  <div class="ctx-head" id="ctx-menu-title">Table</div>
+  <div class="ctx-item" onclick="handleCtxAction('edit')">Edit Properties</div>
+  <div class="ctx-item" onclick="handleCtxAction('clone')">Clone Table</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="handleCtxAction('rot-cw')">Rotate +15°</div>
+  <div class="ctx-item" onclick="handleCtxAction('rot-ccw')">Rotate -15°</div>
+  <div class="ctx-item" onclick="handleCtxAction('rot-reset')">Reset Rotation</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="handleCtxAction('front')">Bring to Front</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item ctx-danger" onclick="handleCtxAction('delete')">Delete Table</div>
 </div>
 
 <!-- TOAST -->
@@ -1023,13 +1071,54 @@ function buildShapeEl(id) {
   body.appendChild(lbl);
   wrap.appendChild(body);
 
+  /* Mouse: left-click drag / right-click context menu */
   wrap.addEventListener('mousedown', function(e) {
     onShapePointerDown(e, id, 'move');
   });
+  wrap.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    showCtxMenu(id, e.clientX, e.clientY);
+  });
+
+  /* Touch: tap = select, long-press = context menu, drag = move */
+  var lpTimer = null;
+  var touchStartCX = 0;
+  var touchStartCY = 0;
+  var touchDragStarted = false;
+
   wrap.addEventListener('touchstart', function(e) {
     e.preventDefault();
-    onShapeTouchDown(e, id, 'move');
+    touchDragStarted = false;
+    var t0 = e.touches[0];
+    touchStartCX = t0.clientX;
+    touchStartCY = t0.clientY;
+    lpTimer = setTimeout(function() {
+      lpTimer = null;
+      showCtxMenu(id, touchStartCX, touchStartCY);
+    }, 500);
   }, {passive: false});
+
+  wrap.addEventListener('touchmove', function(e) {
+    if (touchDragStarted) return;
+    var t0 = e.touches[0];
+    var dx = t0.clientX - touchStartCX;
+    var dy = t0.clientY - touchStartCY;
+    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    touchDragStarted = true;
+    if (editor.mode !== 'editing' || editor.selectedId !== id) selectTable(id);
+    startEditorDrag(touchStartCX, touchStartCY, id, 'move');
+  }, {passive: false});
+
+  wrap.addEventListener('touchend', function() {
+    if (lpTimer) {
+      clearTimeout(lpTimer);
+      lpTimer = null;
+      if (editor.mode !== 'editing' || editor.selectedId !== id) selectTable(id);
+    }
+    touchDragStarted = false;
+  });
 
   return wrap;
 }
@@ -1334,6 +1423,104 @@ function renderCalSidebar() {
 
 
 /* ================================================================
+   CONTEXT MENU
+   ================================================================ */
+var ctxMenuId = null;
+var ctxFrontCounter = 100;
+
+function showCtxMenu(id, clientX, clientY) {
+  hideCtxMenu();
+  ctxMenuId = id;
+  var t    = tables[id];
+  var menu = document.getElementById('cal-ctx-menu');
+  var head = document.getElementById('ctx-menu-title');
+  if (head) head.textContent = 'Table ' + (t ? (t.number || id) : id);
+  menu.style.display = 'block';
+  /* Measure then clamp so menu stays on screen */
+  var mw = menu.offsetWidth  || 190;
+  var mh = menu.offsetHeight || 260;
+  var px = Math.min(clientX + 2, window.innerWidth  - mw - 6);
+  var py = Math.min(clientY + 2, window.innerHeight - mh - 6);
+  menu.style.left = Math.max(4, px) + 'px';
+  menu.style.top  = Math.max(4, py) + 'px';
+}
+
+function hideCtxMenu() {
+  var menu = document.getElementById('cal-ctx-menu');
+  if (menu) menu.style.display = 'none';
+  ctxMenuId = null;
+}
+
+function handleCtxAction(action) {
+  var id = ctxMenuId;
+  hideCtxMenu();
+  if (!id) return;
+
+  if (action === 'edit') {
+    selectTable(id);
+
+  } else if (action === 'clone') {
+    cloneTable(id);
+
+  } else if (action === 'rot-cw') {
+    adjustRotation(id, 15);
+  } else if (action === 'rot-ccw') {
+    adjustRotation(id, -15);
+  } else if (action === 'rot-reset') {
+    adjustRotation(id, null);
+
+  } else if (action === 'front') {
+    bringToFront(id);
+
+  } else if (action === 'delete') {
+    deleteTable(id);
+  }
+}
+
+function cloneTable(id) {
+  var src = tables[id];
+  if (!src) return;
+  var num   = nextTableNumber();
+  var newId = String(num);
+  tables[newId] = {
+    id:     newId,
+    number: num,
+    maxPax: src.maxPax,
+    minPax: src.minPax,
+    shape:  src.shape,
+    x:      Math.min(94, src.x + 4),
+    y:      Math.min(94, src.y + 4),
+    width:  src.width,
+    height: src.height,
+    rotation: src.rotation || 0,
+    occupyingReservationIds: []
+  };
+  document.getElementById('cal-canvas').appendChild(buildShapeEl(newId));
+  renderCalSidebar();
+  selectTable(newId);
+  saveTable(newId);
+  showToast('Cloned as T' + num, 'ok');
+}
+
+function adjustRotation(id, delta) {
+  var t = tables[id];
+  if (!t) return;
+  t.rotation = delta === null ? 0 : (t.rotation || 0) + delta;
+  refreshShapeEl(id);
+  if (editor.selectedId === id) {
+    var wrap = document.getElementById('tbl-' + id);
+    if (wrap) { detachHandles(wrap); attachHandles(wrap, id); }
+  }
+  saveTable(id);
+}
+
+function bringToFront(id) {
+  ctxFrontCounter = ctxFrontCounter + 1;
+  var wrap = document.getElementById('tbl-' + id);
+  if (wrap) wrap.style.zIndex = String(ctxFrontCounter);
+}
+
+/* ================================================================
    SEATING PAGE
    ================================================================ */
 function initSeating() {
@@ -1395,16 +1582,31 @@ function renderSeatShapes() {
 }
 
 /* ================================================================
-   KEYBOARD: Escape exits placement / deselects
+   KEYBOARD: Escape exits placement / deselects / closes ctx menu
    ================================================================ */
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape' && e.keyCode !== 27) return;
+  if (ctxMenuId) { hideCtxMenu(); return; }
   if (editor.mode === 'placing') {
     exitPlacementMode();
   } else if (editor.mode === 'editing') {
     deselectTable(true);
   }
 });
+
+/* Close context menu on outside click */
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('cal-ctx-menu');
+  if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+    hideCtxMenu();
+  }
+});
+document.addEventListener('touchend', function(e) {
+  var menu = document.getElementById('cal-ctx-menu');
+  if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+    hideCtxMenu();
+  }
+}, {passive: true});
 
 /* ================================================================
    BOOT
