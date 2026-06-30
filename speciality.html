@@ -1071,7 +1071,7 @@ function buildShapeEl(id) {
   body.appendChild(lbl);
   wrap.appendChild(body);
 
-  /* Mouse: left-click drag / right-click context menu */
+  /* Mouse: left-button drag, right-click context menu */
   wrap.addEventListener('mousedown', function(e) {
     onShapePointerDown(e, id, 'move');
   });
@@ -1081,43 +1081,49 @@ function buildShapeEl(id) {
     showCtxMenu(id, e.clientX, e.clientY);
   });
 
-  /* Touch: tap = select, long-press = context menu, drag = move */
-  var lpTimer = null;
-  var touchStartCX = 0;
-  var touchStartCY = 0;
-  var touchDragStarted = false;
+  /* Touch: drag starts on touchstart (same as mouse mousedown).
+     Long-press (finger held still for 500 ms) aborts the drag
+     and shows the context menu instead.  touchcancel cleans up. */
+  var lpTimer    = null;
+  var tStartCX   = 0;
+  var tStartCY   = 0;
 
   wrap.addEventListener('touchstart', function(e) {
     e.preventDefault();
-    touchDragStarted = false;
     var t0 = e.touches[0];
-    touchStartCX = t0.clientX;
-    touchStartCY = t0.clientY;
+    tStartCX = t0.clientX;
+    tStartCY = t0.clientY;
+    /* Select table and begin drag tracking from this exact position */
+    if (editor.mode !== 'editing' || editor.selectedId !== id) selectTable(id);
+    startEditorDrag(tStartCX, tStartCY, id, 'move');
+    /* Long-press: abort drag, show menu */
     lpTimer = setTimeout(function() {
       lpTimer = null;
-      showCtxMenu(id, touchStartCX, touchStartCY);
+      endEditorDrag();
+      showCtxMenu(id, tStartCX, tStartCY);
     }, 500);
   }, {passive: false});
 
   wrap.addEventListener('touchmove', function(e) {
-    if (touchDragStarted) return;
-    var t0 = e.touches[0];
-    var dx = t0.clientX - touchStartCX;
-    var dy = t0.clientY - touchStartCY;
-    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
-    touchDragStarted = true;
-    if (editor.mode !== 'editing' || editor.selectedId !== id) selectTable(id);
-    startEditorDrag(touchStartCX, touchStartCY, id, 'move');
+    e.preventDefault();
+    /* Cancel long-press as soon as finger moves significantly */
+    if (lpTimer) {
+      var t0 = e.touches[0];
+      if (Math.abs(t0.clientX - tStartCX) > 5 || Math.abs(t0.clientY - tStartCY) > 5) {
+        clearTimeout(lpTimer);
+        lpTimer = null;
+      }
+    }
   }, {passive: false});
 
   wrap.addEventListener('touchend', function() {
-    if (lpTimer) {
-      clearTimeout(lpTimer);
-      lpTimer = null;
-      if (editor.mode !== 'editing' || editor.selectedId !== id) selectTable(id);
-    }
-    touchDragStarted = false;
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    /* endEditorDrag fires via document touchend listener added by startEditorDrag */
+  });
+
+  wrap.addEventListener('touchcancel', function() {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    endEditorDrag();
   });
 
   return wrap;
