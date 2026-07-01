@@ -4235,14 +4235,17 @@ window.addEventListener('DOMContentLoaded', () => {
   wrapper.addEventListener('touchend', e => {
     if (e.touches.length < 2) {
       pinchActive = false;
-      wrapper.style.overflow = 'auto'; // restore scroll
+      // Don't restore scroll while a draw tool holds the lock — every lasso/
+      // slicer stroke ends with a touchend that bubbles up here, and unlocking
+      // would let subsequent strokes pan the map instead of drawing.
+      if (!_activeTool) wrapper.style.overflow = 'auto';
       saveZoomPref(); // zoom is device-specific
     }
   }, { passive: true });
 
   wrapper.addEventListener('touchcancel', () => {
     pinchActive = false;
-    wrapper.style.overflow = 'auto';
+    if (!_activeTool) wrapper.style.overflow = 'auto';
   }, { passive: true });
 
   // Update clock
@@ -5831,8 +5834,8 @@ function showBroadcastSend(replyToKey, replyToMsg, replyToSender) {
   const isReply = !!replyToKey;
   const replyContext = isReply ? `
     <div style="margin-top:8px;padding:8px 10px;background:var(--bg);border-left:3px solid ${getUserColor(replyToSender||'')};border-radius:4px;">
-      <div style="font-size:8px;color:var(--text-dim);margin-bottom:3px;">Replying to <strong style="color:${getUserColor(replyToSender||'')}">${replyToSender||'?'}</strong></div>
-      <div style="font-size:10px;color:var(--text-dim);font-style:italic;">"${(replyToMsg||'').substring(0,80)}${(replyToMsg||'').length>80?'…':''}"</div>
+      <div style="font-size:8px;color:var(--text-dim);margin-bottom:3px;">Replying to <strong style="color:${getUserColor(replyToSender||'')}">${_esc(replyToSender||'?')}</strong></div>
+      <div style="font-size:10px;color:var(--text-dim);font-style:italic;">"${_esc((replyToMsg||'').substring(0,80))}${(replyToMsg||'').length>80?'…':''}"</div>
     </div>` : '';
   const html = `
     <h2>${isReply ? '💬 REPLY' : '📢 BROADCAST MESSAGE'}</h2>
@@ -5843,7 +5846,7 @@ function showBroadcastSend(replyToKey, replyToMsg, replyToSender) {
       <button class="bc-photo-btn" onclick="_bcTriggerInput('bc-photo-input')" style="flex:1;font-size:13px;padding:10px 0;justify-content:center;">🖼️ Gallery</button>
       <button class="bc-photo-btn" onclick="_bcTriggerInput('bc-camera-input')" style="flex:1;font-size:13px;padding:10px 0;justify-content:center;">📸 Camera</button>
     </div>
-    <textarea id="bc-input" data-reply-to="${replyToKey||''}" data-reply-msg="${(replyToMsg||'').replace(/"/g,'&quot;').substring(0,100)}" data-reply-sender="${replyToSender||''}"
+    <textarea id="bc-input" data-reply-to="${_esc(replyToKey||'')}" data-reply-msg="${_esc((replyToMsg||'').substring(0,100))}" data-reply-sender="${_esc(replyToSender||'')}"
       style="width:100%;height:90px;background:var(--bg);border:1.5px solid var(--border2);color:var(--text);padding:10px;border-radius:5px;font-family:'DM Mono',monospace;font-size:13px;resize:none;outline:none;"
       placeholder="${isReply ? 'Type your reply…' : 'Type your message…'}" autocomplete="off"
       oninput="onBroadcastInput(this)" onkeydown="onBroadcastKeydown(event)"></textarea>
@@ -5927,10 +5930,12 @@ function onBroadcastInput(textarea) {
 function showMentionAutocomplete(textarea) {
   const ac = document.getElementById('mention-autocomplete');
   if (!ac) return;
+  // Pass the index, not the name — names are user-controlled and can break
+  // out of the onclick attribute / inject HTML.
   ac.innerHTML = _mentionState.users.map((u, i) => `
-    <div class="mention-opt ${i===_mentionState.selectedIndex?'active':''}" data-name="${u.name}" onclick="insertMention('${u.name.replace(/'/g,"\\'")}')">
+    <div class="mention-opt ${i===_mentionState.selectedIndex?'active':''}" onclick="if(_mentionState.users[${i}])insertMention(_mentionState.users[${i}].name)">
       <div class="mention-opt-dot" style="background:${getUserColor(u.name)};"></div>
-      <span style="color:${getUserColor(u.name)};font-weight:600;">@${u.name}</span>
+      <span style="color:${getUserColor(u.name)};font-weight:600;">@${_esc(u.name)}</span>
     </div>`).join('');
 
   // Position below textarea
@@ -5991,7 +5996,9 @@ function extractMentions(text) {
 
 function renderMessageWithMentions(text) {
   if (!text) return '';
-  return text.replace(/@([\w]+)/g, (full, name) => {
+  // Escape first — output goes straight into innerHTML sinks (history,
+  // notifications, mention toast). @name matching is unaffected (\w charset).
+  return _esc(text).replace(/@([\w]+)/g, (full, name) => {
     const color = getUserColor(name);
     return `<span class="mention-tag" style="color:${color};border-color:${color}55;background:${color}22;">@${name}</span>`;
   });
@@ -6029,7 +6036,13 @@ function sendBroadcast() {
   if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '0.5'; sendBtn.style.pointerEvents = 'none'; }
 
   db.ref('eclipse/deck7/broadcasts').push(payload)
-    .then(() => { _bcSending = false; _bcClearPhoto(); closeModal(); setStatus(replyToKey ? 'Reply sent' : 'Broadcast sent to all tablets'); })
+    .then(() => {
+      _bcSending = false; _bcClearPhoto();
+      // Only close if the compose modal is still the one on screen — on slow
+      // Wi-Fi the user may have dismissed it and opened a different modal.
+      if (document.getElementById('bc-input')) closeModal();
+      setStatus(replyToKey ? 'Reply sent' : 'Broadcast sent to all tablets');
+    })
     .catch(() => {
       _bcSending = false;
       if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = ''; sendBtn.style.pointerEvents = ''; }
@@ -6111,13 +6124,15 @@ function receiveBroadcast(msg, sender, mentions, key, replyToMsg, replyToSender,
     const qPreview = replyToMsg.length > 120 ? replyToMsg.substring(0, 120) + '…' : replyToMsg;
     quotedHtml = `
       <div style="margin-bottom:14px;padding:8px 12px;background:rgba(255,255,255,0.04);border-left:3px solid ${qSenderColor};border-radius:4px;text-align:left;">
-        <div style="font-size:9px;color:var(--text-dim);margin-bottom:4px;">↩ Replying to <strong style="color:${qSenderColor}">${replyToSender || '?'}</strong></div>
-        <div style="font-size:11px;color:var(--text-dim);font-style:italic;line-height:1.4;">"${qPreview}"</div>
+        <div style="font-size:9px;color:var(--text-dim);margin-bottom:4px;">↩ Replying to <strong style="color:${qSenderColor}">${_esc(replyToSender || '?')}</strong></div>
+        <div style="font-size:11px;color:var(--text-dim);font-style:italic;line-height:1.4;">"${_esc(qPreview)}"</div>
       </div>`;
   }
 
-  // Wrap @mentions
-  let withMentions = (msg || '').replace(/@([\w]+)/g, (full, name) => {
+  // Wrap @mentions — escape the raw message FIRST so user-typed HTML renders
+  // as text on every device instead of executing (stored XSS via broadcasts).
+  // Escaping doesn't disturb the @name / table-number regexes (safe charsets).
+  let withMentions = _esc(msg || '').replace(/@([\w]+)/g, (full, name) => {
     const color = getUserColor(name);
     const isMe = name.toLowerCase() === (DEVICE_ID || '').toLowerCase();
     const bg = isMe ? `${color}33` : `${color}1a`;
@@ -6261,7 +6276,16 @@ function handleBroadcastTableTap(id) {
   }, 500);
 }
 
+// History items cached by Firebase key so Reply buttons can pass just the key.
+let _bcHistoryItems = {};
+function _bcReplyFromHistory(key) {
+  const item = _bcHistoryItems[key];
+  if (!item) { setStatus('Message no longer available'); return; }
+  showBroadcastSend(key, item.msg || '', item.sender || '');
+}
+
 function showBroadcastHistory() {
+  _bcHistoryItems = {};
   const html = `
     <h2>📋 BROADCAST HISTORY</h2>
     <div class="m-sub">Most recent messages first · Tap Reply to thread</div>
@@ -6302,7 +6326,7 @@ function showBroadcastHistory() {
       if (isReply) {
         return `<div class="bc-reply">
           <div class="bc-reply-head">
-            <span class="bc-reply-author" style="color:${color};">${item.sender || 'Unknown'}</span>
+            <span class="bc-reply-author" style="color:${color};">${_esc(item.sender || 'Unknown')}</span>
             <span class="bc-reply-time">${date} ${time}</span>
           </div>
           <div class="bc-reply-body">${renderedMsg}</div>
@@ -6310,16 +6334,17 @@ function showBroadcastHistory() {
         </div>`;
       }
 
-      const safeKey  = (item._key || '').replace(/'/g,"\\'");
-      const safeMsg  = (item.msg || '').replace(/"/g,'&quot;').replace(/'/g,"&#39;");
-      const safeSnd  = (item.sender || '').replace(/'/g,"\\'");
-      const replyBtn = item._key ? `<button class="bc-reply-action" onclick="showBroadcastSend('${safeKey}', '${safeMsg.replace(/&quot;/g,'\\&quot;')}', '${safeSnd}')">↩ Reply</button>` : '';
+      // Look the item up by key at click time instead of interpolating the
+      // message text into the onclick attribute — message newlines/quotes/
+      // backslashes used to produce a SyntaxError and a dead Reply button.
+      if (item._key) _bcHistoryItems[item._key] = item;
+      const replyBtn = item._key ? `<button class="bc-reply-action" onclick="_bcReplyFromHistory('${(item._key || '').replace(/[^\w-]/g,'')}')">↩ Reply</button>` : '';
       const replies = (repliesByParent[item._key] || []).sort((a,b) => (a.ts||0) - (b.ts||0));
       const repliesHtml = replies.map(r => renderItem(r, true)).join('');
 
       return `<div style="padding:8px 10px;background:var(--bg);border:1px solid var(--border2);border-left:3px solid ${color};border-radius:6px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:10px;color:${color};font-weight:600;">${item.sender || 'Unknown'}</span>
+          <span style="font-size:10px;color:${color};font-weight:600;">${_esc(item.sender || 'Unknown')}</span>
           <span style="font-size:9px;color:var(--text-dim);">${date} ${time}</span>
         </div>
         <div style="font-size:12px;color:var(--text);line-height:1.5;">${renderedMsg}</div>
@@ -7238,6 +7263,11 @@ function doMergeSplit(parentId) {
     delete state.tables[parentId + l];
     delete state.positions[parentId + l];
   });
+  // Drop any combination groups referencing the now-deleted halves — a stale
+  // group like ["12A","31"] would leave table 31 badged as combined with a
+  // phantom member and break group seat/reset operations.
+  const halfIds = letters.map(l => parentId + l);
+  state.combinations = state.combinations.filter(grp => !grp.some(x => halfIds.includes(x)));
   const maxTurns = Math.max(state.turnCounts[parentId] || 0,
     ...letters.map(l => state.turnCounts[parentId + l] || 0));
   state.turnCounts[parentId] = maxTurns;
@@ -7245,6 +7275,7 @@ function doMergeSplit(parentId) {
   const ops = {
     [`splits/${parentId}`]:    null,
     [`turnCounts/${parentId}`]: maxTurns,
+    combinations: state.combinations,
   };
   letters.forEach(l => {
     ops[`tables/${parentId}${l}`]     = null;
@@ -7577,7 +7608,7 @@ function confirmSeat(id, confirmed) {
       const minsLeft = Math.round((sb.group.targetTime - Date.now()) / 60000);
       if (minsLeft > 0 && minsLeft <= 45) {
         const tStr  = _fmtHoldTime(sb.group.targetTime);
-        const label = sb.group.note || 'upcoming reservation';
+        const label = _esc(sb.group.note || 'upcoming reservation');
         openModal(
           '<h2 style="color:#eab308;font-size:18px;">⚠️ RESERVATION IN ' + minsLeft + ' MIN</h2>' +
           '<div class="m-sub" style="color:#eab308;opacity:0.85;">' + label + ' at ' + tStr + '</div>' +
@@ -7689,8 +7720,20 @@ function confirmSeat(id, confirmed) {
   });
 }
 
+// Resolve the table's ACTIVE soft-block group at tap time. Guards against the
+// reservation having been cancelled/seated on another device since render.
+function _viewPendingReservation(id) {
+  const sb = _softBlockState(id);
+  closeModal();
+  if (sb && sb.group) _showHeldModal(id, sb.group);
+  else { setStatus('Reservation no longer exists'); renderAll(); }
+}
+
 function showInfoModal(id) {
   const tState = state.tables[id];
+  // Table may have been reset/cleared by another device while a modal with a
+  // "BACK to info" button was open — bail out instead of throwing.
+  if (!tState) { closeModal(); renderAll(); return; }
   const td = TABLE_DATA.find(t => t.id === id);
   const group = getCombinedGroup(id);
   const tableLabel = group ? group.join(' + ') : id;
@@ -7711,7 +7754,7 @@ function showInfoModal(id) {
   const _pendingSb = _softBlockState(id);
   const pendingResHtml = (_pendingSb && _pendingSb.gstate === 'pending') ? (() => {
     const pg = _pendingSb.group;
-    const pNote = pg.note || 'reservation';
+    const pNote = _esc(pg.note || 'reservation');
     const pTime = _fmtHoldTime(pg.targetTime);
     const pLeft = _fmtTimeLeft(pg.targetTime);
     const pCol  = _timeLeftColor(pg.targetTime);
@@ -7720,7 +7763,7 @@ function showInfoModal(id) {
         ⏱ <strong>${pNote}</strong> at ${pTime}
         <span style="color:${pCol};margin-left:6px;">${pLeft}</span>
       </div>
-      <button onclick="closeModal();_showHeldModal('${id}',state.softBlocks[Object.keys(state.softBlocks).find(k=>state.softBlocks[k]&&state.softBlocks[k].tableIds&&state.softBlocks[k].tableIds.includes('${id}'))])" style="background:transparent;border:1px solid rgba(234,179,8,0.5);color:var(--gold);font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">VIEW RESERVATION</button>
+      <button onclick="_viewPendingReservation('${id}')" style="background:transparent;border:1px solid rgba(234,179,8,0.5);color:var(--gold);font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">VIEW RESERVATION</button>
     </div>`;
   })() : '';
 
@@ -7789,7 +7832,7 @@ function showBlockedModal(id) {
   const isBlocker = tState.blockedBy === DEVICE_ID;
   const isHoldGroup = !!(tState.holdGroupId && Array.isArray(tState.holdGroupIds) && tState.holdGroupIds.length);
   const holdCount = isHoldGroup ? tState.holdGroupIds.length : 0;
-  const reasonStr = tState.blockReason ? `<div class="info-row">Reason <span>${tState.blockReason}</span></div>` : '';
+  const reasonStr = tState.blockReason ? `<div class="info-row">Reason <span>${_esc(tState.blockReason)}</span></div>` : '';
 
   // Time remaining for hold-group reservations
   let holdTimeStr = '';
@@ -8212,7 +8255,16 @@ function _rafTick(id) {
 function _startLocalTimerWatch(id, endsAt, totalMs) {
   _cleanupLocalTimer(id);
   const remaining = endsAt - Date.now();
-  if (remaining <= 0) return;
+  if (remaining <= 0) {
+    // Already expired — happens when a device loads/reconnects after the
+    // setter went offline. Silently returning would leave the table stuck and
+    // the Firebase node leaking forever (every 'value' event re-hits this).
+    // Recently expired → fire it (transaction dedups across devices).
+    // Ancient (>30 min) → stale leftovers; just remove the node.
+    if (remaining > -30 * 60 * 1000) _fireResetTimer(id);
+    else db.ref('eclipse/deck7/resetTimers/' + id).remove().catch(() => {});
+    return;
+  }
   const timeoutId = setTimeout(() => _fireResetTimer(id), remaining);
   _pendingResetTimers[id] = { timeoutId, rafId: null, endsAt, totalMs: totalMs || 60000, _lastPillSec: 0 };
   _rafTick(id);
@@ -9187,10 +9239,10 @@ function _updateCompassUI() {
 function updateTimers() {
   const OVERTIME_MS = 90 * 60 * 1000; // 90 minutes
 
-  // Collect all IDs to check — regular tables + split halves
+  // Collect all IDs to check — regular tables + split halves (up to D)
   const ids = [
     ...TABLE_DATA.map(td => td.id),
-    ...Object.keys(state.splits).flatMap(pid => [pid + 'A', pid + 'B']),
+    ...Object.keys(state.splits).flatMap(pid => getSplitLetters(pid).map(l => pid + l)),
   ];
 
   ids.forEach(id => {
@@ -9274,6 +9326,15 @@ function updateStats() {
   const combinedSet = new Set(state.combinations.flat());
 
   TABLE_DATA.forEach(td => {
+    if (state.splits[td.id]) {
+      // Split table — the ghost parent doesn't count; tally each half instead
+      getSplitLetters(td.id).forEach(l => {
+        const hs = state.tables[td.id + l];
+        if (hs?.occupied) { seated++; covers += (hs.covers || 0); }
+        else avail++;
+      });
+      return;
+    }
     const ts = state.tables[td.id];
     if (ts?.occupied) seated++;
     else avail++;
@@ -10044,11 +10105,14 @@ function initFirebase() {
         _startLocalTimerWatch(tableId, entry.endsAt, entry.totalMs || 60000);
       }
     });
-    // Clean up timers that were removed (cancelled or fired)
+    // Clean up timers that were removed (cancelled) or claimed (about to fire).
+    // For claimed entries keep the marker gradient — the transaction applies
+    // locally BEFORE the winner's completion callback runs, and wiping the
+    // background here would flash the dot back to its old color right before
+    // the completion spin + reset.
     Object.keys(_pendingResetTimers).forEach(tableId => {
-      if (!timers[tableId] || timers[tableId].claimed) {
-        _cleanupLocalTimer(tableId);
-      }
+      if (!timers[tableId]) _cleanupLocalTimer(tableId);
+      else if (timers[tableId].claimed) _cleanupLocalTimer(tableId, true);
     });
     renderAll();
   });
@@ -13426,7 +13490,11 @@ function _drawLassoFrame() {
   ctx.stroke();
   ctx.restore();
 
-  // Animate continuously while drawing
+  // Animate continuously while drawing — cancel any previously scheduled
+  // frame first: every pointermove also calls this function, and without the
+  // cancel each call spawned another self-perpetuating rAF loop (hundreds of
+  // parallel full-canvas repaints per frame by the end of a long drag).
+  if (_drawRAF) cancelAnimationFrame(_drawRAF);
   _drawRAF = requestAnimationFrame(() => { if (_drawActive) _drawLassoFrame(); });
 }
 
@@ -13861,7 +13929,13 @@ function _finishSlicer() {
       const letters = getSplitLetters(parentId);
       return parentId + SPLIT_LETTERS[letters.length];
     });
-    hit.forEach(id => splitTable(id, undefined, { fromSlicer: true }));
+    // Separate the halves PERPENDICULAR to the drawn slash — a vertical slice
+    // yields left/right halves, matching where the knife "cut".
+    const _sliceVecX = ex - sx, _sliceVecY = ey - sy;
+    const sepDir = (Math.hypot(_sliceVecX, _sliceVecY) > 0.5)
+      ? { dx: -_sliceVecY, dy: _sliceVecX }
+      : undefined;
+    hit.forEach(id => splitTable(id, sepDir, { fromSlicer: true }));
     hitParents.forEach(parentId => addSplitHalf(parentId));
     setStatus('Split: ' + [...hit, ...newHalfNames].join(', ') + (_multiSlice ? ' · slicer still on' : ''));
     if (_multiSlice) { _drawPts = []; _slicerStart = null; }  // ready for next slice
@@ -13997,10 +14071,10 @@ function applyFinder() {
     return;
   }
 
-  // Get effective seat capacity for each table or split half
+  // Get effective seat capacity for each table or split half (up to D)
   const allIds = [
     ...TABLE_DATA.map(td => td.id),
-    ...Object.keys(state.splits).flatMap(pid => [pid + 'A', pid + 'B']),
+    ...Object.keys(state.splits).flatMap(pid => getSplitLetters(pid).map(l => pid + l)),
   ];
 
   // Max party size by size button: 1→2, 3→4, 5→6, 7→∞
@@ -14172,7 +14246,7 @@ function _softBlockInfoHtml(id, compact) {
   const targetStr  = _fmtHoldTime(g.targetTime);
   const createdStr = g.createdAt
     ? new Date(g.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
-  const note     = g.note || '—';
+  const note     = _esc(g.note || '—');
   const by       = g.createdBy || '—';
   const minsLeft = Math.round((g.targetTime - Date.now()) / 60000);
   const timeLeft = minsLeft > 0 ? minsLeft + ' min' : 'OVERDUE';
@@ -14347,7 +14421,7 @@ function _saveSoftBlockGroup(ids, targetTime, note) {
 // ── Held table info modal + override ──────────────────────────────────────
 function _showHeldModal(id, group) {
   const tStr = _fmtHoldTime(group.targetTime);
-  const note = group.note || 'reservation';
+  const note = _esc(group.note || 'reservation');
   const count = Array.isArray(group.tableIds) ? group.tableIds.length : 1;
   const timeLeft = _fmtTimeLeft(group.targetTime);
   const tlColor  = _timeLeftColor(group.targetTime);
@@ -14414,7 +14488,7 @@ function _showHeldTimeEdit(id, groupId, backTarget) {
   if (!group) { setStatus('Reservation no longer exists'); closeModal(); return; }
   const d = new Date(group.targetTime);
   const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  const note = group.note || 'reservation';
+  const note = _esc(group.note || 'reservation');
   const backFn = backTarget === 'seat'
     ? 'showSeatModal(\'' + id + '\')'
     : '_reopenHoldModal(\'' + id + '\')';
@@ -14481,6 +14555,23 @@ function seatHoldGroup(id) {
     }
   }
   const ids = groupIds || (sbGroup && sbGroup.tableIds) || [id];
+
+  // Guard: if some group tables still have guests seated, confirm before
+  // wiping their live seating data (covers, staterooms, timing).
+  const stillOccupied = ids.filter(t => state.tables[t] && state.tables[t].occupied && !state.tables[t].blocked);
+  if (stillOccupied.length && !window._seatHoldGroupConfirmed) {
+    openModal(
+      '<h2 style="color:#eab308;">⚠️ TABLES STILL OCCUPIED</h2>' +
+      '<div class="m-sub">Table(s) ' + stillOccupied.join(', ') + ' still have guests seated.<br>' +
+      'Seating this reservation will clear their current seating data.</div>' +
+      '<div class="m-btns" style="margin-top:18px">' +
+        '<button class="btn-d" onclick="window._seatHoldGroupConfirmed=true;seatHoldGroup(\'' + id + '\')">SEAT ANYWAY — CLEAR THEM</button>' +
+        '<button class="btn-s" onclick="closeModal()">← BACK</button>' +
+      '</div>'
+    );
+    return;
+  }
+  window._seatHoldGroupConfirmed = false;
 
   closeModal();
   // Release all tables in the group
@@ -14586,7 +14677,7 @@ function _confirmCancelReservation(id) {
     note = g.note || '';
     tableCount = (g.tableIds || [id]).length;
   }
-  const noteStr = note ? ' for <b>' + note + '</b>' : '';
+  const noteStr = note ? ' for <b>' + _esc(note) + '</b>' : '';
   const tablesStr = tableCount > 1 ? tableCount + ' tables' : 'this table';
   document.getElementById('modal').innerHTML = `
     <h2 style="color:#ef4444;">CANCEL RESERVATION?</h2>
@@ -14600,7 +14691,6 @@ function _confirmCancelReservation(id) {
 
 function cancelHoldReservation(id) {
   const ts = state.tables[id] || {};
-  // Figure out which tables belong to this reservation
   let groupIds = (ts.holdGroupIds && ts.holdGroupIds.slice()) || [id];
   let groupId  = ts.holdGroupId || null;
 
@@ -14616,11 +14706,23 @@ function cancelHoldReservation(id) {
     }
   }
 
+  // Prefer the LIVE group membership over the table-state snapshot — the
+  // snapshot goes stale when a table is individually released from the group
+  // (softBlockOverride) and would otherwise be wiped here.
+  if (groupId && state.softBlocks && state.softBlocks[groupId] &&
+      Array.isArray(state.softBlocks[groupId].tableIds)) {
+    groupIds = state.softBlocks[groupId].tableIds.slice();
+  }
+
   _captureUndo('Cancel reservation ' + groupIds.join(', '));
 
-  // Release every table in the group back to available
+  // Release the group's tables back to available — but never touch a table
+  // that is currently OCCUPIED by guests (e.g. released early and re-seated);
+  // cancelling a reservation must not destroy a live seating.
   const ops = {};
   groupIds.forEach(t => {
+    const cur = state.tables[t];
+    if (cur && cur.occupied) return;
     delete state.tables[t];
     ops['tables/' + t] = null;
   });
@@ -14659,7 +14761,9 @@ function _softBlockOnReset(id) {
 
     // If we are already inside the 45-minute window, hard-block this table
     // immediately rather than leaving it in the soft "held" state.
-    if (minsToTarget <= 45) {
+    // (Gated on the service window so the local state never diverges from
+    // what _tableOp actually persists.)
+    if (minsToTarget <= 45 && isInServiceWindow()) {
       state.tables[id] = {
         occupied: false, blocked: true,
         blockedBy: g.createdBy || DEVICE_ID || 'unknown', blockedAt: Date.now(),
@@ -14875,7 +14979,11 @@ function _softBlockWarningTick() {
           else availIds.push(t);
         });
 
-        if (availIds.length > 0) {
+        // Only perform the block when _tableOp will actually persist it —
+        // outside the service window _tableOp silently drops the table write
+        // while the resetDone flags below would still reach Firebase, making
+        // every other device think the block already happened (desync).
+        if (availIds.length > 0 && isInServiceWindow()) {
           const ops = {};
           availIds.forEach(t => {
             state.tables[t] = {
@@ -14957,7 +15065,7 @@ function _broadcastRaw(msg, sender) {
 }
 
 function _showHoldOccupiedModal(occIds, g) {
-  const label = g.note || 'reservation';
+  const label = _esc(g.note || 'reservation');
   const tStr  = _fmtHoldTime(g.targetTime);
   const rows = occIds.map(function(id) {
     return '<div class="info-row" style="color:var(--text);">Table <span style="color:var(--gold);font-weight:700;">' + id +
@@ -14975,7 +15083,7 @@ function _showHoldOccupiedModal(occIds, g) {
 
 function _showHoldOverdueModal(g, notReady) {
   const tStr  = _fmtHoldTime(g.targetTime);
-  const label = g.note || 'Hold group';
+  const label = _esc(g.note || 'Hold group');
   const ids   = (g.tableIds || []).filter(t => !(g.resetDone && g.resetDone[t]));
   _openHoldModal(
     '<h2 style="color:#ef4444;">⛔ OVERDUE</h2>' +
@@ -15013,7 +15121,7 @@ function _showHoldToast(msg, isOverdue) {
   toast.style.borderLeftColor = isOverdue ? '#ef4444' : '#eab308';
   toast.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;">' +
-      '<span style="flex:1;">' + msg + '</span>' +
+      '<span style="flex:1;">' + _esc(msg) + '</span>' +
       '<button class="hold-toast-x">DISMISS</button>' +
     '</div>';
   const x = toast.querySelector('.hold-toast-x');
@@ -15156,7 +15264,7 @@ function _confirmPrevReservations() {
 // ============================================================
 function _showHoldOverdueCancelModal(g) {
   const tStr      = _fmtHoldTime(g.targetTime);
-  const label     = g.note || 'reservation';
+  const label     = _esc(g.note || 'reservation');
   const ids       = g.tableIds || [];
   const overdueMin = Math.abs(Math.round((g.targetTime - Date.now()) / 60000));
   const safeId    = (g.id || '').replace(/'/g, "\\'");
