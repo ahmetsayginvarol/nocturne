@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Nocturne III · Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<link rel="stylesheet" href="styles3.css">
+</head>
+<body>
+
+<!-- ══ BOOT VEIL ══ -->
+<div id="veil">
+  <div class="veil-mark">III</div>
+  <div class="veil-word">NOCTURNE</div>
+  <div class="veil-sub">console · deck 7</div>
+  <div class="veil-bar"><i id="veil-fill"></i></div>
+</div>
+
+<!-- ══ IDENTITY GATE ══ -->
+<div id="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-title">Who's on the floor?</div>
+    <input id="gate-input" type="text" maxlength="16" placeholder="your name" autocomplete="off" spellcheck="false">
+    <button id="gate-go" disabled>ENTER</button>
+  </div>
+</div>
+
+<!-- ══ COMMAND RAIL ══ -->
+<aside id="rail">
+  <div class="rail-mark" title="Nocturne III">III</div>
+
+  <div class="rail-stats">
+    <div class="rs" id="rs-avail"><b>—</b><span>FREE</span></div>
+    <div class="rs" id="rs-seated"><b>—</b><span>SEATED</span></div>
+    <div class="rs" id="rs-covers"><b>—</b><span>COVERS</span></div>
+    <div class="rs rs-pct" id="rs-occ"><b>—</b><span>FLOOR</span></div>
+  </div>
+
+  <div class="rail-actions">
+    <button class="ra" id="ra-search" title="Search">⌕</button>
+    <button class="ra" id="ra-cast" title="Broadcast">✦</button>
+    <button class="ra" id="ra-map" title="Light / dark map">◐</button>
+    <button class="ra" id="ra-fit" title="Fit map">▣</button>
+  </div>
+
+  <div class="rail-foot">
+    <div id="rail-clock">--:--</div>
+    <div id="rail-user">—</div>
+    <div id="rail-sync" class="off" title="Sync">●</div>
+  </div>
+</aside>
+
+<!-- ══ TICKER ══ -->
+<div id="ticker"><div id="ticker-track"></div></div>
+
+<!-- ══ SEARCH BAR (slides from rail) ══ -->
+<div id="searchbar" hidden>
+  <input id="search-in" type="text" placeholder="table · stateroom · covers" autocomplete="off" spellcheck="false">
+  <button id="search-x">✕</button>
+</div>
+
+<!-- ══ MAP STAGE ══ -->
+<main id="stage">
+  <div id="world">
+    <img id="map" src="map.jpg" alt="floor map" draggable="false">
+    <svg id="links"></svg>
+    <div id="chips"></div>
+  </div>
+</main>
+
+<!-- ══ BOTTOM SHEET ══ -->
+<div id="sheet-scrim" hidden></div>
+<section id="sheet" hidden>
+  <div class="sheet-grip"></div>
+  <div id="sheet-body"></div>
+</section>
+
+<!-- ══ TOASTS ══ -->
+<div id="toasts"></div>
+
+<script src="data3.js"></script>
+<script src="app3.js"></script>
+</body>
+</html>
