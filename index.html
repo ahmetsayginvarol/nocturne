@@ -1654,6 +1654,38 @@ body.tool-active * { cursor: crosshair !important; }
 }
 .slicer-slash { animation: slash-out 0.5s ease forwards; }
 
+/* ── Magic Seat — winning table halo ── */
+@keyframes magic-halo {
+  0%   { box-shadow: 0 0 0 0 rgba(201,168,76,0.95), 0 0 26px rgba(201,168,76,0.9); }
+  70%  { box-shadow: 0 0 0 28px rgba(201,168,76,0), 0 0 36px rgba(201,168,76,0.5); }
+  100% { box-shadow: 0 0 0 0 rgba(201,168,76,0), 0 0 8px rgba(201,168,76,0); }
+}
+.tm.magic-pick {
+  z-index: 16 !important;
+  animation: magic-halo 1.05s ease-out 3;
+  border-color: var(--gold) !important;
+}
+.fsz-btn.magic-btn {
+  border-color: rgba(201,168,76,0.55);
+  color: var(--gold);
+}
+.fsz-btn.magic-btn:active { background: rgba(201,168,76,0.18); }
+
+/* ── Table note badge — small gold pencil on the dot corner ── */
+.note-badge {
+  position: absolute;
+  bottom: -5px; right: -5px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #1a0a00;
+  font-size: 8px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--bg);
+  z-index: 7;
+  pointer-events: none;
+}
+
 /* Selected table highlight */
 .tm.lasso-selected {
   box-shadow: 0 0 0 3px rgba(201,168,76,0.95), 0 0 18px rgba(201,168,76,0.6) !important;
@@ -3072,6 +3104,7 @@ body.fs-mode #fs-hud { animation: hud-in 0.35s cubic-bezier(.2,.8,.3,1) both; }
     </div>
     <div class="finder-sep"></div>
     <button class="fsz-btn sharing-filter" id="finder-sharing" onclick="toggleFinderSharing()">⟳ SHARING</button>
+    <button class="fsz-btn magic-btn" id="finder-magic" onclick="magicSeat()" title="Pick the best table for this party">✨ BEST</button>
     <button class="finder-clear" id="finder-clear" onclick="clearFinder()">✕</button>
   </div>
 </div>
@@ -4303,6 +4336,14 @@ function renderAll() {
       marker.appendChild(badge);
     }
 
+    // Table note badge — small gold pencil in the corner
+    if (_tableNotes[td.id] && !isSplitParent) {
+      const nb = document.createElement('div');
+      nb.className = 'note-badge';
+      nb.textContent = '✎';
+      marker.appendChild(nb);
+    }
+
     if (!isSplitParent) attachMarkerEvents(marker, td.id);
     applyMarkerStyle(marker, td.id);
     layer.appendChild(marker);
@@ -4359,6 +4400,14 @@ function renderAll() {
         badge.className = 'split-count-badge';
         badge.textContent = letters.length;
         marker.appendChild(badge);
+      }
+
+      // Table note badge on split halves too
+      if (_tableNotes[halfId]) {
+        const nb = document.createElement('div');
+        nb.className = 'note-badge';
+        nb.textContent = '✎';
+        marker.appendChild(nb);
       }
 
       attachMarkerEvents(marker, halfId);
@@ -7779,11 +7828,16 @@ function showInfoModal(id) {
       <div class="info-row">Elapsed <span style="color:${sColor}">${elapsedStr}</span></div>
       ${group ? `<div class="info-row">Combined <span style="color:#2dd4bf">${group.join(' + ')}</span></div>` : ''}
     </div>
+    ${_tableNotes[id] ? `<div style="margin-top:10px;padding:9px 12px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.35);border-radius:6px;font-size:11px;color:var(--gold);line-height:1.5;">
+      📝 ${_esc(_tableNotes[id].text)}
+      ${_tableNotes[id].by ? `<span style="color:var(--text-dim);font-size:9px;margin-left:6px;">— ${_esc(_tableNotes[id].by)}</span>` : ''}
+    </div>` : ''}
     ${pendingResHtml}
     <div class="m-btns" style="margin-top:16px;flex-wrap:wrap;gap:6px;">
       ${sharingBtn}
       <button class="btn-s" style="flex:1;min-width:90px;" onclick="showEditModal('${id}')">✎ EDIT</button>
       <button class="btn-s" style="flex:1;min-width:90px;" onclick="showMoveModal('${id}')">↗ MOVE</button>
+      <button class="btn-s" style="flex:1;min-width:90px;${_tableNotes[id] ? 'border-color:rgba(201,168,76,0.5);color:var(--gold);' : ''}" onclick="_showTableNoteEdit('${id}')">📝 NOTE</button>
       ${_pendingResetTimers[id]
         ? `<button class="btn-d" style="flex:1;min-width:90px;border-color:rgba(201,168,76,0.5);color:var(--gold);" onclick="_cancelPendingReset('${id}');closeModal();renderAll();">✕ CANCEL TIMER</button>`
         : Date.now() - (tState.seatedAt||0) < 7*60*1000
@@ -8361,6 +8415,8 @@ function doResetTable(id, _senderOverride) {
   const ops = {};
   (group || [id]).forEach(tid => { ops[`tables/${tid}`] = null; });
   _tableOp(ops);
+  // Notes belong to the seating, not the table — clear them on reset
+  _clearTableNotesFor(group || [id]);
   renderAll();
   closeModal();
   _flashMarker(id, 'reset');
@@ -10114,6 +10170,12 @@ function initFirebase() {
       if (!timers[tableId]) _cleanupLocalTimer(tableId);
       else if (timers[tableId].claimed) _cleanupLocalTimer(tableId, true);
     });
+    renderAll();
+  });
+
+  // ── Table notes listener — synced whispers on table dots ────────────────
+  db.ref('eclipse/deck7/tableNotes').on('value', snap => {
+    _tableNotes = snap.val() || {};
     renderAll();
   });
 
@@ -14151,6 +14213,202 @@ function clearFinderHighlights() {
   document.querySelectorAll('.tm').forEach(el =>
     el.classList.remove('finder-match', 'finder-match-sharing', 'finder-dim')
   );
+}
+
+// ============================================================
+// ✨ MAGIC SEAT — score the whole floor and fly to the best table
+// ============================================================
+// Resolve any table/half id to its map position (% of image)
+function _tablePosOf(id) {
+  if (state.positions[id]) return state.positions[id];
+  const baseId = id.replace(/[A-D]$/, '');
+  const split = state.splits[baseId];
+  if (split && id !== baseId) {
+    const letter = id.slice(-1);
+    if (split[letter]) return split[letter];
+  }
+  const td = TABLE_DATA.find(t => t.id === baseId);
+  return td ? { x: td.x, y: td.y } : null;
+}
+
+// Smoothly pan (and gently zoom) the map so the given table is centred.
+function _flyToTable(id) {
+  const wrapper = document.getElementById('map-wrapper');
+  const img     = document.getElementById('floor-map');
+  const pos     = _tablePosOf(id);
+  if (!wrapper || !img || !img.naturalWidth || !pos) return;
+
+  if ((state.zoom || 1) < 1.15) applyZoomAt(1.3);
+  const z    = state.zoom || 1;
+  const rot  = ((state.mapRotation || 0) % 360 + 360) % 360;
+  const swap = rot === 90 || rot === 270;
+  const mx = pos.x / 100, my = pos.y / 100;
+  // Map image fraction → on-screen content fraction (inverse of _screenToMapPct)
+  let fx, fy;
+  if (rot === 90)       { fx = 1 - my; fy = mx;     }
+  else if (rot === 180) { fx = 1 - mx; fy = 1 - my; }
+  else if (rot === 270) { fx = my;     fy = 1 - mx; }
+  else                  { fx = mx;     fy = my;     }
+  const contentW = (swap ? img.naturalHeight : img.naturalWidth)  * z;
+  const contentH = (swap ? img.naturalWidth  : img.naturalHeight) * z;
+  wrapper.scrollTo({
+    left: Math.max(0, fx * contentW - wrapper.clientWidth  / 2),
+    top:  Math.max(0, fy * contentH - wrapper.clientHeight / 2),
+    behavior: 'smooth',
+  });
+}
+
+function magicSeat() {
+  const party = finderSize || 2;
+  const stress = computeStationStress();
+
+  // Candidate ids: base tables + split halves (skip ghost parents)
+  const allIds = [
+    ...TABLE_DATA.filter(td => !state.splits[td.id]).map(td => td.id),
+    ...Object.keys(state.splits).flatMap(pid => getSplitLetters(pid).map(l => pid + l)),
+  ];
+
+  const cands = [];
+  allIds.forEach(id => {
+    const ts = state.tables[id];
+    if (ts && (ts.occupied || ts.blocked)) return;
+    if (isTableInClosedStation(id.replace(/[A-D]$/, ''))) return;
+    if (_softBlockState(id)) return; // held for a reservation
+
+    // Seat capacity (halves inherit an even share of the parent's seats)
+    const baseId = id.replace(/[A-D]$/, '');
+    let seats;
+    if (id !== baseId && state.splits[baseId]) {
+      const parentTd = TABLE_DATA.find(t => t.id === baseId);
+      const letters = getSplitLetters(baseId);
+      seats = parentTd ? Math.max(1, Math.floor(parentTd.seats / letters.length)) : 2;
+    } else {
+      const td = TABLE_DATA.find(t => t.id === id);
+      seats = td ? td.seats : 2;
+    }
+    if (seats < party) return;
+
+    // ── Score ──
+    // Fit (0–35): tight fit beats wasting a big table on a small party
+    const waste = seats - party;
+    const fit = Math.max(0, 35 - waste * 9);
+    // Station balance (0–30): favour the quietest station
+    const st = TABLE_TO_STATION[baseId];
+    const info = st ? stress[st] : null;
+    const load = info && info.totalTables > 0 ? info.activeTables / info.totalTables : 0;
+    const balance = (1 - load) * 30;
+    // Turn balance (0–20): favour tables that have turned less tonight
+    const turns = state.turnCounts[id] || state.turnCounts[baseId] || 0;
+    const turnScore = (1 - Math.min(turns, 4) / 4) * 20;
+    // Breathing room (0–15): fewer occupied neighbours within ~7% of the map
+    const pos = _tablePosOf(id);
+    let crowd = 0;
+    if (pos) {
+      TABLE_DATA.forEach(o => {
+        if (o.id === baseId) return;
+        const os = state.tables[o.id];
+        if (!os?.occupied) return;
+        const op = _tablePosOf(o.id);
+        if (op && Math.hypot(op.x - pos.x, op.y - pos.y) < 7) crowd++;
+      });
+    }
+    const room = (1 - Math.min(crowd, 4) / 4) * 15;
+
+    cands.push({ id, seats, st: st || '—', score: fit + balance + turnScore + room });
+  });
+
+  if (!cands.length) {
+    // Floor is full for this size — forecast the next table to free up
+    let best = null;
+    const now = Date.now();
+    TABLE_DATA.forEach(td => {
+      const ts = state.tables[td.id];
+      if (!ts?.occupied || !ts.seatedAt) return;
+      if (td.seats < party) return;
+      const remainMs = ts.seatedAt + getExpectedDuration(ts.covers || 2) * 60000 - now;
+      if (!best || remainMs < best.remainMs) best = { id: td.id, remainMs };
+    });
+    if (best) {
+      const mins = Math.max(1, Math.round(best.remainMs / 60000));
+      setStatus('No free table for ' + party + ' — Table ' + best.id + ' should free up in ~' + mins + ' min');
+      _flyToTable(best.id);
+      const m = document.getElementById('tm-' + best.id);
+      if (m) { m.classList.remove('magic-pick'); void m.offsetWidth; m.classList.add('magic-pick'); setTimeout(() => m.classList.remove('magic-pick'), 3400); }
+    } else {
+      setStatus('No table fits a party of ' + party);
+    }
+    return;
+  }
+
+  cands.sort((a, b) => b.score - a.score);
+  const win = cands[0];
+
+  // Cinematics: dim the floor, fly to the winner, pulse its halo
+  document.querySelectorAll('.tm').forEach(el => {
+    if (el.dataset.id !== win.id) el.classList.add('finder-dim');
+  });
+  const marker = document.getElementById('tm-' + win.id);
+  if (marker) {
+    marker.classList.remove('finder-dim', 'magic-pick');
+    void marker.offsetWidth; // restart animation
+    marker.classList.add('magic-pick');
+  }
+  _flyToTable(win.id);
+  setStatus('✨ Best table for ' + party + ': Table ' + win.id + ' — ' + win.seats + ' seats · station ' + win.st);
+  setTimeout(() => {
+    document.getElementById('tm-' + win.id)?.classList.remove('magic-pick');
+    if (!finderSize && !finderSharing) clearFinderHighlights();
+    else applyFinder();
+  }, 3400);
+}
+
+// ============================================================
+// 📝 TABLE NOTES — synced whispers (birthday, allergy, VIP…)
+// ============================================================
+let _tableNotes = {}; // tableId → { text, by, ts }
+
+function _showTableNoteEdit(id) {
+  const existing = _tableNotes[id];
+  openModal(
+    '<h2 style="color:var(--gold)">📝 TABLE ' + id + ' NOTE</h2>' +
+    '<div class="m-sub">Visible on every device — allergies, birthdays, VIPs…</div>' +
+    '<textarea id="table-note-input" maxlength="90" placeholder="e.g. Birthday — dessert w/ candle at 8:30"' +
+      ' style="width:100%;height:72px;margin-top:12px;background:var(--bg);border:1.5px solid var(--border2);color:var(--text);padding:10px;border-radius:5px;font-family:\'DM Mono\',monospace;font-size:13px;resize:none;outline:none;">' +
+      _esc(existing ? existing.text : '') + '</textarea>' +
+    '<div class="m-btns" style="margin-top:14px">' +
+      '<button class="btn-p" onclick="_saveTableNote(\'' + id + '\')">✓ SAVE</button>' +
+      (existing ? '<button class="btn-d" onclick="_removeTableNote(\'' + id + '\')">✕ REMOVE</button>' : '') +
+      '<button class="btn-s" onclick="closeModal();showInfoModal(\'' + id + '\')">← BACK</button>' +
+    '</div>'
+  );
+  setTimeout(() => document.getElementById('table-note-input')?.focus(), 100);
+}
+
+function _saveTableNote(id) {
+  const text = (document.getElementById('table-note-input')?.value || '').trim();
+  if (!text) { _removeTableNote(id); return; }
+  _tableNotes[id] = { text, by: DEVICE_ID || '', ts: Date.now() };
+  db.ref('eclipse/deck7/tableNotes/' + id).set(_tableNotes[id]).catch(() => {});
+  closeModal();
+  renderAll();
+  setStatus('Note saved for table ' + id);
+}
+
+function _removeTableNote(id) {
+  delete _tableNotes[id];
+  db.ref('eclipse/deck7/tableNotes/' + id).remove().catch(() => {});
+  closeModal();
+  renderAll();
+  setStatus('Note removed from table ' + id);
+}
+
+function _clearTableNotesFor(ids) {
+  (ids || []).forEach(t => {
+    if (_tableNotes[t]) {
+      delete _tableNotes[t];
+      db.ref('eclipse/deck7/tableNotes/' + t).remove().catch(() => {});
+    }
+  });
 }
 
 // ============================================================
