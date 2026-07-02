@@ -97,8 +97,20 @@ input, textarea { font-family:var(--mono); }
   background:var(--glass); border-right:1px solid var(--line);
   backdrop-filter:blur(18px);
   display:flex; flex-direction:column; align-items:center;
-  padding:calc(env(safe-area-inset-top, 0px) + 14px) 0 14px;
+  padding:calc(env(safe-area-inset-top, 0px) + 14px) 0 calc(env(safe-area-inset-bottom, 0px) + 14px);
   gap:18px;
+  overflow-y:auto; overflow-x:hidden;
+  scrollbar-width:none;
+  touch-action:pan-y;
+}
+#rail::-webkit-scrollbar { display:none; }
+/* Short screens: compress the rail so all six actions stay visible */
+@media (max-height: 720px) {
+  #rail { gap:10px; }
+  .rail-stats { gap:7px; }
+  .rs b { font-size:14px; }
+  .ra { width:38px; height:38px; font-size:15px; border-radius:11px; }
+  .rail-actions { gap:7px; }
 }
 .rail-mark {
   font-family:var(--mono); font-weight:600; font-size:13px; letter-spacing:.34em;
