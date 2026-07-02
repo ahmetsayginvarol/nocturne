@@ -41,8 +41,38 @@ let ME = localStorage.getItem('eclipse_user_name') || '';
 const S = {
   tables: {}, splits: {}, combinations: [], turnCounts: {}, positions: {},
   notes: {}, softBlocks: {}, resetTimers: {},
-  dark: false, ready: false,
+  dark: false, ready: false, heat: false,
 };
+
+/* ── Device prefs ── */
+const PREFS = Object.assign(
+  { chipScale: 1, showUnders: true, sound: true },
+  JSON.parse(localStorage.getItem('n3_prefs') || '{}')
+);
+function savePrefs() { localStorage.setItem('n3_prefs', JSON.stringify(PREFS)); applyPrefs(); }
+function applyPrefs() {
+  document.getElementById('chips')?.style.setProperty('--cs', PREFS.chipScale);
+  document.body.classList.toggle('no-unders', !PREFS.showUnders);
+}
+
+/* ── Sound — one soft blip, WebAudio, unlocked on first touch ── */
+let _actx = null;
+document.addEventListener('pointerdown', () => {
+  if (!_actx) { try { _actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (_actx && _actx.state === 'suspended') _actx.resume();
+}, { capture: true });
+function blip(freq) {
+  if (!PREFS.sound || !_actx || _actx.state !== 'running') return;
+  try {
+    const o = _actx.createOscillator(), g = _actx.createGain();
+    o.type = 'sine'; o.frequency.value = freq || 660;
+    g.gain.setValueAtTime(0.0001, _actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12, _actx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, _actx.currentTime + 0.35);
+    o.connect(g); g.connect(_actx.destination);
+    o.start(); o.stop(_actx.currentTime + 0.4);
+  } catch (e) {}
+}
 
 /* ── Tiny utils ── */
 const $  = (sel) => document.querySelector(sel);
@@ -96,12 +126,14 @@ function veilDone() {
 
 document.addEventListener('DOMContentLoaded', () => {
   veil(15);
+  applyPrefs();
   initGate();
   initCamera();
   initListeners();
   initRail();
   initClock();
   setInterval(tickUnders, 20000);
+  setInterval(tickTimerUnders, 1000);
   // Failsafe: never trap users behind the veil
   setTimeout(veilDone, 7000);
 });
@@ -146,7 +178,11 @@ function initListeners() {
 
   P('tableNotes').on('value', s => { S.notes = s.val() || {}; render(); });
   P('softBlocks').on('value', s => { S.softBlocks = s.val() || {}; render(); });
-  P('resetTimers').on('value', s => { S.resetTimers = s.val() || {}; render(); });
+  P('resetTimers').on('value', s => {
+    S.resetTimers = s.val() || {};
+    armTimerWatches();
+    render();
+  });
 
   P('seatings').once('value').then(s => {
     _skipSeatN = s.val()?.nonce || null;
@@ -158,6 +194,7 @@ function initListeners() {
       if (Date.now() - (d.ts || 0) > 30000) return;
       toast(`<b>${esc(d.sender || '?')}</b> seated table <b>${esc(d.tableId)}</b> · ${d.covers || '?'} covers`);
       tick(`<b>${esc(d.tableId)}</b> seated · ${esc(d.sender || '')}`);
+      blip(740);
     });
   });
 
@@ -171,6 +208,7 @@ function initListeners() {
       if (Date.now() - (d.ts || 0) > 30000) return;
       toast(`table <b>${esc(d.tableId)}</b> reset by <b>${esc(d.sender || '?')}</b>`, 'warn');
       tick(`<b>${esc(d.tableId)}</b> reset`, true);
+      blip(520);
     });
   });
 
@@ -204,6 +242,8 @@ function render() {
   const W = img.naturalWidth, H = img.naturalHeight;
   layer.innerHTML = '';
 
+  const heat = S.heat ? stationHeat() : null;
+
   const drawChip = (id, pos, seats) => {
     const ts   = S.tables[id];
     const chip = document.createElement('div');
@@ -212,6 +252,7 @@ function render() {
     chip.style.left = (pos.x / 100 * W) + 'px';
     chip.style.top  = (pos.y / 100 * H) + 'px';
 
+    const timer = S.resetTimers[id] && !S.resetTimers[id].claimed ? S.resetTimers[id] : null;
     let under = '';
     if (ts?.occupied) {
       chip.classList.add('occ' + Math.min(ts.seating || 1, 4));
@@ -223,12 +264,22 @@ function render() {
       chip.classList.add('held');
     }
 
+    if (heat) {
+      const lvl = heat[TABLE_TO_STATION[id.replace(/[A-D]$/, '')]];
+      if (lvl) chip.classList.add('heat-' + lvl);
+    }
+
+    const underHtml = timer
+      ? `<div class="under tmr" data-ends="${timer.endsAt}">⏱</div>`
+      : (under ? `<div class="under" data-t0="${ts.seatedAt || ''}">${under}</div>` : '');
+
     chip.innerHTML = `<span>${esc(id)}</span>` +
       (S.notes[id] ? '<span class="corner">✎</span>' : '') +
-      (S.resetTimers[id] && !S.resetTimers[id].claimed ? '<div class="timer-ring"></div>' : '') +
-      (under ? `<div class="under" data-t0="${ts.seatedAt || ''}">${under}</div>` : '');
+      (timer ? '<div class="timer-ring"></div>' : '') +
+      underHtml;
 
-    chip.addEventListener('click', () => { if (!_camMoved) openSheet(id); });
+    chip.addEventListener('click', () => { if (!_camMoved && !_lpFired) openSheet(id); });
+    wireLongPress(chip, id, ts, seats);
     layer.appendChild(chip);
   };
 
@@ -266,6 +317,53 @@ function tickUnders() {
     const t0 = parseInt(u.dataset.t0, 10);
     if (t0) u.textContent = elapsedStr(t0);
   });
+}
+
+// Auto-reset countdown text — updated every second
+function tickTimerUnders() {
+  document.querySelectorAll('.chip .under[data-ends]').forEach(u => {
+    const left = Math.max(0, Math.round((parseInt(u.dataset.ends, 10) - Date.now()) / 1000));
+    const m = Math.floor(left / 60), s = left % 60;
+    u.textContent = '⏱ ' + (m > 0 ? m + ':' + String(s).padStart(2, '0') : s + 's');
+  });
+}
+
+/* ── Station heat lens — occupancy level per station ── */
+function stationHeat() {
+  const out = {};
+  Object.entries(SECTIONS).forEach(([st, ids]) => {
+    let total = 0, occ = 0;
+    ids.forEach(id => {
+      const list = S.splits[id] ? splitLetters(id).map(l => id + l) : [id];
+      list.forEach(t => { total++; if (S.tables[t]?.occupied) occ++; });
+    });
+    const pct = total ? occ / total : 0;
+    out[st] = pct >= 0.85 ? 'hot' : pct >= 0.55 ? 'warm' : pct > 0 ? 'ok' : null;
+  });
+  return out;
+}
+
+/* ── Express seat — long-press a free table to seat at full capacity ── */
+let _lpFired = false;
+function wireLongPress(chip, id, ts, seats) {
+  if (ts?.occupied || ts?.blocked || heldGroupOf(id)) return;
+  let t = null;
+  chip.addEventListener('pointerdown', () => {
+    _lpFired = false;
+    t = setTimeout(() => {
+      if (_camMoved) return;
+      _lpFired = true;
+      _covers = seats; _staterooms = [];
+      doSeat(id);
+      blip(880);
+      toast(`⚡ express-seated <b>${esc(id)}</b> · ${seats} covers`);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 550);
+  });
+  const cancel = () => { clearTimeout(t); };
+  chip.addEventListener('pointerup', cancel);
+  chip.addEventListener('pointercancel', cancel);
+  chip.addEventListener('pointerleave', cancel);
 }
 
 function updateStats() {
@@ -482,6 +580,9 @@ function buildOccupied(id, ts) {
     </div>
     <div class="sh-actions">
       <button class="shb ghost-mint" id="do-note">📝 NOTE</button>
+      ${S.resetTimers[id] && !S.resetTimers[id].claimed
+        ? '<button class="shb ghost-red" id="do-tmr-x">✕ TIMER</button>'
+        : '<button class="shb ghost-warn" id="do-tmr">⏱ AUTO-RESET</button>'}
       <button class="shb" id="do-close">CLOSE</button>
     </div>
     <div class="swipe-wrap">
@@ -491,6 +592,9 @@ function buildOccupied(id, ts) {
       </div>
     </div>`;
   $('#do-note').onclick  = () => buildNote(id);
+  const tmr = $('#do-tmr'), tmrX = $('#do-tmr-x');
+  if (tmr)  tmr.onclick  = () => buildTimer(id);
+  if (tmrX) tmrX.onclick = () => cancelTimer(id);
   $('#do-close').onclick = closeSheet;
   initSwipe(id, grp);
 }
@@ -525,15 +629,68 @@ function initSwipe(id, grp) {
   knob.addEventListener('pointercancel', drop);
 }
 
-function doReset(id, grp) {
+function doReset(id, grp, senderOverride) {
   const ids = grp || [id];
   const ops = {};
   ids.forEach(t => { ops['tables/' + t] = null; delete S.tables[t]; });
   FLOOR.update(ops).catch(() => {});
-  P('resets').set({ tableId: id, ts: Date.now(), deviceId: deviceKey(), sender: ME || '', nonce: nonce() }).catch(() => {});
+  P('resets').set({ tableId: id, ts: Date.now(), deviceId: deviceKey(), sender: senderOverride || ME || '', nonce: nonce() }).catch(() => {});
   ids.forEach(t => { if (S.notes[t]) { delete S.notes[t]; P('tableNotes/' + t).remove().catch(() => {}); } });
   closeSheet(); render();
-  tick(`<b>${esc(id)}</b> reset · you`, true);
+  tick(`<b>${esc(id)}</b> reset · ${esc(senderOverride || 'you')}`, true);
+}
+
+/* ── Auto-reset timers — same claim protocol as the classic console ── */
+const _timerHandles = {}; // id → { h, endsAt }
+
+function armTimerWatches() {
+  // Drop watches whose Firebase entry vanished or was claimed
+  Object.keys(_timerHandles).forEach(id => {
+    const e = S.resetTimers[id];
+    if (!e || e.claimed || e.endsAt !== _timerHandles[id].endsAt) {
+      clearTimeout(_timerHandles[id].h);
+      delete _timerHandles[id];
+    }
+  });
+  // Arm new ones
+  Object.keys(S.resetTimers).forEach(id => {
+    const e = S.resetTimers[id];
+    if (!e || e.claimed || _timerHandles[id]) return;
+    const remain = e.endsAt - Date.now();
+    if (remain <= 0) { fireTimer(id); return; }
+    _timerHandles[id] = { endsAt: e.endsAt, h: setTimeout(() => fireTimer(id), remain) };
+  });
+}
+
+function fireTimer(id) {
+  if (_timerHandles[id]) { clearTimeout(_timerHandles[id].h); delete _timerHandles[id]; }
+  const ref = P('resetTimers/' + id);
+  ref.transaction(cur => {
+    if (!cur || cur.claimed) return; // abort — someone else won
+    return Object.assign({}, cur, { claimed: true, claimedBy: deviceKey() });
+  }, (err, committed, snap) => {
+    if (!committed) return;
+    const setBy = snap?.val()?.setBy || null;
+    ref.remove().catch(() => {});
+    doReset(id, combinedGroup(id), setBy);
+  });
+}
+
+function scheduleTimer(id, mins) {
+  P('resetTimers/' + id).set({
+    endsAt: Date.now() + mins * 60000,
+    totalMs: mins * 60000,
+    setBy: deviceKey(),
+  }).catch(() => {});
+  closeSheet();
+  toast(`⏱ table <b>${esc(id)}</b> auto-resets in ${mins} min`);
+}
+
+function cancelTimer(id) {
+  P('resetTimers/' + id).remove().catch(() => {});
+  if (_timerHandles[id]) { clearTimeout(_timerHandles[id].h); delete _timerHandles[id]; }
+  closeSheet();
+  toast(`timer cancelled on <b>${esc(id)}</b>`, 'warn');
 }
 
 /* ── NOTES ── */
@@ -623,6 +780,100 @@ function buildHeldOrBlocked(id, ts, held) {
   $('#hb-close').onclick = closeSheet;
 }
 
+/* ── Auto-reset stepper sheet ── */
+let _tmrMins = 2;
+function buildTimer(id) {
+  _tmrMins = 2;
+  $('#sheet-body').innerHTML = `
+    <div class="sh-head"><div class="sh-num">${esc(id)}</div><div class="sh-tag free">AUTO-RESET</div></div>
+    <div class="sh-sub">table resets itself when the countdown ends — every device sees it</div>
+    <div class="tmr-line">
+      <button class="cbtn" id="tmr-minus">−</button>
+      <div class="tmr-val" id="tmr-val">2 min</div>
+      <button class="cbtn" id="tmr-plus">+</button>
+    </div>
+    <div class="sh-actions">
+      <button class="shb primary" id="tmr-go">START TIMER</button>
+      <button class="shb" id="tmr-back">BACK</button>
+    </div>`;
+  const upd = () => { $('#tmr-val').textContent = _tmrMins + ' min'; };
+  $('#tmr-minus').onclick = () => { _tmrMins = Math.max(1, _tmrMins - 1); upd(); };
+  $('#tmr-plus').onclick  = () => { _tmrMins = Math.min(15, _tmrMins + 1); upd(); };
+  $('#tmr-go').onclick    = () => scheduleTimer(id, _tmrMins);
+  $('#tmr-back').onclick  = () => openSheet(id);
+}
+
+/* ═══════════════ SETTINGS ═══════════════ */
+function buildSettings() {
+  _sheetId = null;
+  const cs = PREFS.chipScale;
+  $('#sheet-body').innerHTML = `
+    <div class="sh-head"><div class="sh-num">⚙</div><div class="sh-tag free">SETTINGS</div></div>
+    <div class="sh-sub">device preferences — stored on this tablet only</div>
+    <div class="set-row">
+      <div>Signed in as<span class="hint">tap to change your name</span></div>
+      <button class="seg-name shb ghost-mint" id="set-name" style="flex:0;min-width:0;padding:8px 16px;">${esc(ME || '—')}</button>
+    </div>
+    <div class="set-row">
+      <div>Chip size</div>
+      <div class="seg">
+        <button data-cs="0.8" class="${cs === 0.8 ? 'on' : ''}">S</button>
+        <button data-cs="1"   class="${cs === 1   ? 'on' : ''}">M</button>
+        <button data-cs="1.3" class="${cs === 1.3 ? 'on' : ''}">L</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <div>Elapsed labels<span class="hint">time under occupied chips</span></div>
+      <button class="tgl ${PREFS.showUnders ? 'on' : ''}" id="set-unders"></button>
+    </div>
+    <div class="set-row">
+      <div>Sound<span class="hint">soft blip on floor activity</span></div>
+      <button class="tgl ${PREFS.sound ? 'on' : ''}" id="set-sound"></button>
+    </div>
+    <div class="set-row">
+      <div>Force refresh<span class="hint">reloads EVERY connected device — both consoles</span></div>
+      <button class="shb ghost-red" id="set-reload" style="flex:0;min-width:0;padding:8px 16px;">↺ SEND</button>
+    </div>
+    <div class="sh-actions" style="margin-top:4px;">
+      <button class="shb" id="set-close">CLOSE</button>
+    </div>
+    <div style="text-align:center;margin-top:14px;font-family:var(--mono);font-size:9px;color:var(--ink-dim);letter-spacing:.2em;">NOCTURNE III · CONSOLE</div>`;
+  $('#sheet').hidden = false;
+  $('#sheet-scrim').hidden = false;
+
+  document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+    PREFS.chipScale = parseFloat(b.dataset.cs);
+    savePrefs();
+    document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b));
+  });
+  $('#set-unders').onclick = e => {
+    PREFS.showUnders = !PREFS.showUnders; savePrefs();
+    e.target.classList.toggle('on', PREFS.showUnders);
+  };
+  $('#set-sound').onclick = e => {
+    PREFS.sound = !PREFS.sound; savePrefs();
+    e.target.classList.toggle('on', PREFS.sound);
+    if (PREFS.sound) blip(660);
+  };
+  $('#set-name').onclick = () => {
+    localStorage.removeItem('eclipse_user_name');
+    ME = '';
+    closeSheet();
+    $('#gate').hidden = false;
+    $('#gate-input').value = '';
+    $('#gate-go').disabled = true;
+    setTimeout(() => $('#gate-input').focus(), 80);
+  };
+  let armed = false;
+  $('#set-reload').onclick = e => {
+    if (!armed) { armed = true; e.target.textContent = 'SURE?'; setTimeout(() => { armed = false; e.target.textContent = '↺ SEND'; }, 2500); return; }
+    P('_forceReload').set(Date.now()).catch(() => {});
+    toast('refresh signal sent to the whole floor', 'warn');
+    closeSheet();
+  };
+  $('#set-close').onclick = closeSheet;
+}
+
 /* ═══════════════ RAIL ═══════════════ */
 function initRail() {
   $('#ra-fit').onclick = fitMap;
@@ -649,6 +900,13 @@ function initRail() {
   };
 
   $('#ra-cast').onclick = buildBroadcast;
+  $('#ra-set').onclick  = buildSettings;
+  $('#ra-heat').onclick = () => {
+    S.heat = !S.heat;
+    document.body.classList.toggle('heat-on', S.heat);
+    $('#ra-heat').classList.toggle('on', S.heat);
+    render();
+  };
 }
 
 function applySearch() {

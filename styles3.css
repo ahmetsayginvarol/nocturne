@@ -177,12 +177,13 @@ input, textarea { font-family:var(--mono); }
 #chips { position:absolute; inset:0; }
 
 /* ══ TABLE CHIPS ══ */
+#chips { --cs:1; }
 .chip {
   position:absolute; transform:translate(-50%,-50%);
-  width:32px; height:24px;
-  border-radius:9px;
+  width:calc(32px * var(--cs)); height:calc(24px * var(--cs));
+  border-radius:calc(9px * var(--cs));
   display:flex; align-items:center; justify-content:center;
-  font-family:var(--mono); font-weight:600; font-size:10.5px;
+  font-family:var(--mono); font-weight:600; font-size:calc(10.5px * var(--cs));
   background:rgba(13, 17, 22, 0.82);
   border:1.5px solid var(--line-hi);
   color:var(--ink-mid);
@@ -380,6 +381,49 @@ textarea.sh-ta {
   border-radius:12px; padding:11px 13px; font-size:14px; margin-bottom:14px;
 }
 textarea.sh-ta:focus { border-color:var(--mint); }
+
+/* ── prefs: hide elapsed labels ── */
+body.no-unders .chip .under { display:none; }
+
+/* ── station heat lens ── */
+body.heat-on .chip.heat-ok   { box-shadow:0 0 0 2px rgba(87,230,180,.35); }
+body.heat-on .chip.heat-warm { box-shadow:0 0 0 2px rgba(255,194,91,.5); }
+body.heat-on .chip.heat-hot  { box-shadow:0 0 0 2px rgba(255,93,115,.65), 0 0 10px rgba(255,93,115,.4); }
+
+/* ── timer countdown under label ── */
+.chip .under.tmr { color:var(--mint); font-weight:700; }
+
+/* ── settings sheet rows ── */
+.set-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 14px; margin-bottom:9px;
+  background:rgba(11,14,18,.65); border:1px solid var(--line); border-radius:12px;
+  font-size:13px; color:var(--ink);
+}
+.set-row .hint { font-size:10px; color:var(--ink-dim); display:block; margin-top:2px; }
+.set-row .shb { flex:0 0 auto; min-width:0; white-space:nowrap; padding:8px 14px; max-width:150px; overflow:hidden; text-overflow:ellipsis; }
+.seg { display:flex; gap:5px; }
+.seg button {
+  padding:7px 13px; border-radius:9px; font-size:11px; font-weight:600;
+  background:transparent; border:1px solid var(--line-hi); color:var(--ink-mid);
+}
+.seg button.on { border-color:var(--mint); color:var(--mint); background:var(--mint-dim); }
+.tgl {
+  width:46px; height:26px; border-radius:13px; border:none;
+  background:var(--line-hi); position:relative; transition:background .18s;
+}
+.tgl::after {
+  content:''; position:absolute; top:3px; left:3px;
+  width:20px; height:20px; border-radius:50%; background:#fff;
+  transition:left .18s;
+}
+.tgl.on { background:var(--mint); }
+.tgl.on::after { left:23px; }
+
+/* ── auto-reset mini stepper ── */
+.tmr-line { display:flex; align-items:center; justify-content:center; gap:14px; margin:10px 0 14px; }
+.tmr-line .cbtn { width:44px; height:44px; font-size:20px; }
+.tmr-val { font-family:var(--mono); font-size:26px; font-weight:600; min-width:88px; text-align:center; }
 
 /* ══ TOASTS ══ */
 #toasts {
